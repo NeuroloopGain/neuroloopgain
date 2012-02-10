@@ -1,0 +1,11 @@
+NeuroLoopGain analyzer for EEG (ElectroEncephaloGram) signals.
+
+Copyright 1980-2012, Bob Kemp and Marco Roessen, The Netherlands.
+
+The first (closed source) version (1.0) of this software was developed in 1980-2011 by Bob Kemp and  Marco Roessen, based on the mathematical derivations and specifications in the article "Analysis of a sleep-dependent neuronal feedback loop: the slow-wave microcontinuity of the EEG" by B Kemp B, AH Zwinderman, B Tuk, HAC Kamphuisen and JJL Oberyé in IEEE-BME 47(9), 2000: 1185-1194. This closed source version 1.0 was available from http://www.edfplus.info/downloads/software/NeuroLoopGain.zip and was used in scientific articles till 2011.
+
+The closed source version 1.0 was converted to the first open-source version (2.0) in 2012 by Bob Kemp and Marco Roessen and used large portions that were converted in 2011 by Diego Álvarez Estévez from A Coruña, Spain. Versions 1.0 and 2.0 have identical output except for minor (less than 0.1%) round-off differences.
+
+Both versions 1.0 and 2.0 use the open EDF specification at http://www.edfplus.info/specs/edf.html for the file format of both the input file (that contains the EEG signal) and the output file (that contains the Gain signal).
+
+Versions 1.0 and 2.0 as well as the most recent version and the mentioned article can be downloaded from the project repository at Google, http://code.google.com/p/neuroloopgain/
