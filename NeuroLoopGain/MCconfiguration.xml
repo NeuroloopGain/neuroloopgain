@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<MCconfiguration>
+  <Parameter Name="XpiBPlus">9</Parameter>
+  <Parameter Name="XpiBMinus">-9</Parameter>
+  <Parameter Name="XpiBZero">10</Parameter>
+  <Parameter Name="ArtMaxSeconds">7</Parameter>
+  <Parameter Name="MCEventDuration">1</Parameter>
+  <Parameter Name="MCEventReject">2.0</Parameter>
+  <Parameter Name="MCjumpFind">0.5</Parameter>
+  <Parameter Name="MicGain">10.0</Parameter>
+  <Parameter Name="IIRBackPolate">0.5</Parameter>
+  <Parameter Name="LogFloatA">0.001</Parameter>
+  <Parameter Name="LogFloatY0">0.0001</Parameter>
+  <Parameter Name="SS_SUmin">-2000</Parameter>
+  <Parameter Name="SS_SUmax">30000</Parameter>
+  <Parameter Name="piBPeakWidth">0.2</Parameter>
+  <Parameter Name="piBCorrelationFunctionBufferSize">6000</Parameter>
+  <Parameter Name="IIRUnderSampler">0</Parameter>
+  <Parameter Name="F0">1</Parameter>
+  <Parameter Name="FC">1.8</Parameter>
+  <Parameter Name="B">1.5</Parameter>
+  <Parameter Name="SmoothRate">0.01666</Parameter>
+  <Parameter Name="SafetyFactor">3</Parameter>
+  <Parameter Name="SmoothTime">1</Parameter>
+  <Parameter Name="DefaultOutputFile"></Parameter>
+  <Parameter Name="OverWriteOutputFile">true</Parameter>
+  <Parameter Name="ShowPiBHistogram">true</Parameter>
+  <Parameter Name="CopyInputSignal">false</Parameter>
+</MCconfiguration>
+
