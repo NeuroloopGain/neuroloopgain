@@ -225,7 +225,7 @@ namespace NeuroLoopGainLibrary.Edf
         return;
       Creating = false;
       _active = true;
-      _validFormat = true; // ?? TODO: Ask what use this is ??
+      _validFormat = true;
       CalculateDataBlockSize();
       DoDataBufferSizeChanged();
     }
@@ -737,9 +737,9 @@ namespace NeuroLoopGainLibrary.Edf
     protected void WriteHeaderInfo()
     {
       if (!FileInfo.StartTime.HasValue)
-        throw new ArgumentNullException("fileinfo starttime");
+        throw new ArgumentException("Fileinfo Starttime is not set.");
       if (!FileInfo.StartDate.HasValue)
-        throw new ArgumentNullException("fileinfo startdate");
+        throw new ArgumentException("Fileinfo Startdate is not set.");
       Debug.Assert(FileHandle != null, DataFileConsts.DataFileIsNotOpen);
       lock (FileAccess)
       {
@@ -750,12 +750,12 @@ namespace NeuroLoopGainLibrary.Edf
         WriteStringField(FileInfo.FieldValid[(int)EdfFileInfoBase.Field.StartDate], FileInfo.StartDate.Value.ToString("dd.MM.yy"), 8);
         WriteStringField(FileInfo.FieldValid[(int)EdfFileInfoBase.Field.StartTime],
                          string.Format("{0:00}.{1:00}.{2:00}", FileInfo.StartTime.GetValueOrDefault().Hours, FileInfo.StartTime.GetValueOrDefault().Minutes, FileInfo.StartTime.Value.Seconds), 8);
-        WriteStringField(FileInfo.FieldValid[(int)EdfFileInfoBase.Field.HeaderBytes], FileInfo.HeaderBytes.ToString(), 8);
+        WriteStringField(FileInfo.FieldValid[(int)EdfFileInfoBase.Field.HeaderBytes], FileInfo.HeaderBytes.ToString(CultureInfo.InvariantCulture), 8);
         WriteStringField(FileInfo.FieldValid[(int)EdfFileInfoBase.Field.Reserved], FileInfo.Reserved, 44);
-        WriteStringField(FileInfo.FieldValid[(int)EdfFileInfoBase.Field.NrDataRecords], FileInfo.NrDataRecords.ToString(), 8);
+        WriteStringField(FileInfo.FieldValid[(int)EdfFileInfoBase.Field.NrDataRecords], FileInfo.NrDataRecords.ToString(CultureInfo.InvariantCulture), 8);
         WriteStringField(FileInfo.FieldValid[(int)EdfFileInfoBase.Field.SampleRecDuration],
                          TextUtils.DoubleToString(FileInfo.SampleRecDuration, FormatInfo, 8), 8);
-        WriteStringField(FileInfo.FieldValid[(int)EdfFileInfoBase.Field.NrSignals], FileInfo.NrSignals.ToString(), 4);
+        WriteStringField(FileInfo.FieldValid[(int)EdfFileInfoBase.Field.NrSignals], FileInfo.NrSignals.ToString(CultureInfo.InvariantCulture), 4);
         FileInfo.Modified = false;
       }
     }
@@ -780,13 +780,13 @@ namespace NeuroLoopGainLibrary.Edf
           WriteStringField(SignalInfo[i].FieldValid[(int)EdfSignalInfoBase.Field.PhysiMax],
                            TextUtils.DoubleToString(SignalInfo[i].PhysiMax, FormatInfo, 8), 8);
         for (int i = 0; i < FileInfo.NrSignals; i++)
-          WriteStringField(SignalInfo[i].FieldValid[(int)EdfSignalInfoBase.Field.DigiMin], SignalInfo[i].DigiMin.ToString(), 8);
+          WriteStringField(SignalInfo[i].FieldValid[(int)EdfSignalInfoBase.Field.DigiMin], SignalInfo[i].DigiMin.ToString(CultureInfo.InvariantCulture), 8);
         for (int i = 0; i < FileInfo.NrSignals; i++)
-          WriteStringField(SignalInfo[i].FieldValid[(int)EdfSignalInfoBase.Field.DigiMax], SignalInfo[i].DigiMax.ToString(), 8);
+          WriteStringField(SignalInfo[i].FieldValid[(int)EdfSignalInfoBase.Field.DigiMax], SignalInfo[i].DigiMax.ToString(CultureInfo.InvariantCulture), 8);
         for (int i = 0; i < FileInfo.NrSignals; i++)
           WriteStringField(SignalInfo[i].FieldValid[(int)EdfSignalInfoBase.Field.Prefilter], SignalInfo[i].PreFilter, 80);
         for (int i = 0; i < FileInfo.NrSignals; i++)
-          WriteStringField(SignalInfo[i].FieldValid[(int)EdfSignalInfoBase.Field.NrSamples], SignalInfo[i].NrSamples.ToString(), 8);
+          WriteStringField(SignalInfo[i].FieldValid[(int)EdfSignalInfoBase.Field.NrSamples], SignalInfo[i].NrSamples.ToString(CultureInfo.InvariantCulture), 8);
         for (int i = 0; i < FileInfo.NrSignals; i++)
         {
           WriteStringField(SignalInfo[i].FieldValid[(int)EdfSignalInfoBase.Field.Reserved], SignalInfo[i].Reserved, 32);
@@ -871,9 +871,9 @@ namespace NeuroLoopGainLibrary.Edf
       {
         NumberFormatInfo ni = new NumberFormatInfo();
         if (DecimalSeparator != char.MinValue)
-          ni.NumberDecimalSeparator = DecimalSeparator.ToString();
+          ni.NumberDecimalSeparator = DecimalSeparator.ToString(CultureInfo.InvariantCulture);
         if (ThousandSeparator != char.MinValue)
-          ni.NumberGroupSeparator = ThousandSeparator.ToString();
+          ni.NumberGroupSeparator = ThousandSeparator.ToString(CultureInfo.InvariantCulture);
         return ni;
       }
     }

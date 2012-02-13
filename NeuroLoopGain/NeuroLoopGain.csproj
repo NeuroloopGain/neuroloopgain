@@ -60,6 +60,7 @@
     </Compile>
     <Compile Include="MCconfiguration.cs" />
     <Compile Include="MCJump.cs" />
+    <Compile Include="MCOutputSignalIndex.cs" />
     <Compile Include="NeuroLoopGain.cs" />
     <Compile Include="NeuroLoopGainController.cs" />
     <Compile Include="NeuroLoopGainGuiException.cs" />

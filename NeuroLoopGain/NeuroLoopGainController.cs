@@ -22,7 +22,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using NeuroLoopGainLibrary.Edf;
 using NeuroLoopGainLibrary.Errorhandling;
 using NeuroLoopGainLibrary.Logging;
@@ -36,16 +35,19 @@ namespace NeuroLoopGain
 
     // singleton
     private static NeuroLoopGainController _instance;
+
     private readonly NeuroLoopGain _neuroLoopGain;
+
     private readonly string[] _signalOutputLabels = new[] { "input", "SU", "SS", "SU+", "SU-", "SS+", "SS-", "SSP", "SS0", "HF artifact", "LF artifact", "Missing signal", "MC (Gain)", "MC (Gain)jump", "MC (Gain)event" };
-    /// <summary>
-    /// The maximum EDF blocksize as specified by the EDF specifications.
-    /// </summary>
-    private const int MaxEdFblockSize = 61440;
     /// <summary>
     /// The maximum EDF block duration in seconds.
     /// </summary>
     private const double MaxBlockDuration = 60 * 30;
+
+    /// <summary>
+    /// The maximum EDF blocksize as specified by the EDF specifications.
+    /// </summary>
+    private const int MaxEdFblockSize = 61440;
 
     #endregion private fields
 
@@ -64,15 +66,10 @@ namespace NeuroLoopGain
     /// <returns></returns>
     private bool PrepareEDFFiles()
     {
-      if (AppConf.CopyInputSignal)
-      {
-        _neuroLoopGain.NumOutputSignals = 15;
-      }
-      else
-      {
-        _neuroLoopGain.NumOutputSignals = 14;
-      }
+      _neuroLoopGain.NumOutputSignals = AppConf.CopyInputSignal ? 15 : 14;
 
+      // Set output signal indexes, so we can use symbolic names: e.g. MCOutputSignalIndex.MCevent
+      MCOutputSignalIndex.CopyInputSignal = AppConf.CopyInputSignal;
 
       double[] sFrecs = new double[_neuroLoopGain.NumOutputSignals];
 
@@ -131,7 +128,7 @@ namespace NeuroLoopGain
           {
             //TODO: error??, not valid SUSSsmoothingTime parameter (we're gonna miss some samples)
             ApplicationError.Add("not valid SmoothTime parameter (we're gonna miss some samples)", DefaultErrorMessageId);
-            ErrorLogger.WriteErrorLog("not valid SmoothTime parameter (we're gonna miss some samples). Error = " + bestError.ToString());
+            ErrorLogger.WriteErrorLog("not valid SmoothTime parameter (we're gonna miss some samples). Error = " + bestError.ToString(CultureInfo.InvariantCulture));
             outputEDF.FileInfo.SampleRecDuration = results[bestIdx].Duration;
           }
           else
@@ -146,8 +143,8 @@ namespace NeuroLoopGain
           ErrorLogger.WriteErrorLog("failed to assign a data block duration for output EDF");
         }
 
-        _neuroLoopGain.OutputBufferOffsets = new int[15];
-        _neuroLoopGain.OutputBufferOffsets[0] = 0;
+        //_neuroLoopGain.OutputBufferOffsets = new int[15];
+        //_neuroLoopGain.OutputBufferOffsets[0] = 0;
 
         for (int k = 0; k < _neuroLoopGain.NumOutputSignals; k++)
         {
@@ -156,6 +153,7 @@ namespace NeuroLoopGain
           if (Math.Truncate(nsamples) < nsamples)
           {
             //TODO: Error?? the number of samples in a data block should be an integer number
+
             ApplicationError.Add("not valid SmoothTime parameter: we are going miss some samples", DefaultErrorMessageId);
             ErrorLogger.WriteErrorLog("not valid SmoothTime parameter: we are going miss some samples");
             /* It should effectively be an integer number, but if we admit some error to happen
@@ -165,8 +163,8 @@ namespace NeuroLoopGain
             nsamples = Math.Truncate(nsamples);
           }
           outputEDF.SignalInfo[k].NrSamples = (int)nsamples;
-          //if (k == 0)
-          if ((k == 0) && AppConf.CopyInputSignal)
+
+          if (AppConf.CopyInputSignal && k == MCOutputSignalIndex.Input)
           {
             outputEDF.SignalInfo[k].DigiMax = edfSignalInfo.DigiMax;
             outputEDF.SignalInfo[k].DigiMin = edfSignalInfo.DigiMin;
@@ -179,18 +177,19 @@ namespace NeuroLoopGain
             outputEDF.SignalInfo[k].DigiMax = short.MaxValue;
             outputEDF.SignalInfo[k].DigiMin = -short.MaxValue;
             //if (k < 9)
-            if (k < _neuroLoopGain.NumOutputSignals - 6)
+            if (k <= MCOutputSignalIndex.SS0)
             {
               outputEDF.SignalInfo[k].PhysiDim = "Filtered";
               outputEDF.SignalInfo[k].PhysiMax = short.MaxValue;
               outputEDF.SignalInfo[k].PhysiMin = -short.MaxValue;
             }
             else
-              //if ((k >= 9) && (k < 12))
-              if ((k >= _neuroLoopGain.NumOutputSignals - 6) && (k < _neuroLoopGain.NumOutputSignals - 3))
+              if ((k >= MCOutputSignalIndex.HFart) && (k <= MCOutputSignalIndex.MissingSignal))
               {
-                outputEDF.SignalInfo[k].PhysiMax = short.MaxValue;
-                outputEDF.SignalInfo[k].PhysiMin = -short.MaxValue;
+                outputEDF.SignalInfo[k].PhysiMax = short.MaxValue * NeuroLoopGain.ArtifactPhysicalDimensionResolution;
+                outputEDF.SignalInfo[k].PhysiMin = -short.MaxValue * NeuroLoopGain.ArtifactPhysicalDimensionResolution;
+                //outputEDF.SignalInfo[k].PhysiMax = short.MaxValue;
+                //outputEDF.SignalInfo[k].PhysiMin = -short.MaxValue;
               }
               else
               {
@@ -198,33 +197,32 @@ namespace NeuroLoopGain
                 outputEDF.SignalInfo[k].PhysiMax = short.MaxValue / AppConf.MicGain;
                 outputEDF.SignalInfo[k].PhysiMin = -short.MaxValue / AppConf.MicGain;
               }
-            if (k > 0)
-            {
-              if (AppConf.CopyInputSignal)
-                _neuroLoopGain.OutputBufferOffsets[k] = _neuroLoopGain.OutputBufferOffsets[k - 1] + outputEDF.SignalInfo[k - 1].NrSamples;
-              else
-                _neuroLoopGain.OutputBufferOffsets[k + 1] = _neuroLoopGain.OutputBufferOffsets[k] + outputEDF.SignalInfo[k].NrSamples;
-            }
+            //if (k > 0)
+            //{
+            //  // todo: Marco: Kan toch makkelijker?
+            //  if (AppConf.CopyInputSignal)
+            //    _neuroLoopGain.OutputBufferOffsets[k] = _neuroLoopGain.OutputBufferOffsets[k - 1] + outputEDF.SignalInfo[k - 1].NrSamples;
+            //  else
+            //    _neuroLoopGain.OutputBufferOffsets[k + 1] = _neuroLoopGain.OutputBufferOffsets[k] + outputEDF.SignalInfo[k].NrSamples;
+            //}
           }
 
           outputEDF.SignalInfo[k].Reserved = edfSignalInfo.Reserved;
-          //if ((k > 0) && (k < 9))
-          if ((k >= _neuroLoopGain.NumOutputSignals - 14) && (k < _neuroLoopGain.NumOutputSignals - 6))
-            if (AppConf.CopyInputSignal)
-              outputEDF.SignalInfo[k].SignalLabel = _signalOutputLabels[k] + " " + edfSignalInfo.PhysiDim + "**2/x";
-            else
-              outputEDF.SignalInfo[k].SignalLabel = _signalOutputLabels[k + 1] + " " + edfSignalInfo.PhysiDim + "**2/x";
+
+          if ((k >= MCOutputSignalIndex.SU) && (k <= MCOutputSignalIndex.SS0))
+            outputEDF.SignalInfo[k].SignalLabel = AppConf.CopyInputSignal
+                                                    ? _signalOutputLabels[k] + " " + edfSignalInfo.PhysiDim + "**2/x"
+                                                    : _signalOutputLabels[k + 1] + " " + edfSignalInfo.PhysiDim + "**2/x";
           else
-            if (AppConf.CopyInputSignal)
-              outputEDF.SignalInfo[k].SignalLabel = _signalOutputLabels[k];
-            else
-              outputEDF.SignalInfo[k].SignalLabel = _signalOutputLabels[k + 1];
+            outputEDF.SignalInfo[k].SignalLabel = AppConf.CopyInputSignal
+                                                    ? _signalOutputLabels[k]
+                                                    : _signalOutputLabels[k + 1];
           outputEDF.SignalInfo[k].TransducerType = edfSignalInfo.TransducerType;
           outputEDF.SignalInfo[k].ThousandSeparator = edfSignalInfo.ThousandSeparator;
         }
 
         // Info for MC analysis
-        outputEDF.FileInfo.Recording = string.Format(CultureInfo.InvariantCulture, 
+        outputEDF.FileInfo.Recording = string.Format(CultureInfo.InvariantCulture,
           "Startdate {0} NeuroLoop-gain analysis at {1:#.#}Hz of {2} in {3}",
           _neuroLoopGain.InputEDFFile.FileInfo.StartDate.HasValue ? _neuroLoopGain.InputEDFFile.FileInfo.StartDate.Value.ToString("dd-MMM-yyyy", CultureInfo.InvariantCulture) : "X",
           sFrecs[1],
@@ -236,6 +234,11 @@ namespace NeuroLoopGain
         outputEDF.FileInfo.StartTime = _neuroLoopGain.InputEDFFile.FileInfo.StartTime;
 
         outputEDF.CommitChanges();
+
+        // Create a outputbuffer signal data offset lookup table
+        _neuroLoopGain.OutputBufferOffset = new int[_neuroLoopGain.NumOutputSignals];
+        for (int i = 0; i < _neuroLoopGain.NumOutputSignals; i++)
+          _neuroLoopGain.OutputBufferOffset[i] = outputEDF.SignalInfo[i].BufferOffset;
 
         _neuroLoopGain.MCsignalsBlockSamples = outputEDF.SignalInfo[1].NrSamples;
         _neuroLoopGain.OutputEDFFile = outputEDF;

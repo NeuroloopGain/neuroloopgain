@@ -34,7 +34,7 @@ namespace NeuroLoopGain
         public double B { get; set; }
         public double SmoothRate { get; set; }
         public double SmoothTime { get; set; }
-        public short [] SU_SS {get; set;}
+        public int [] SU_SS {get; set;}
         public double[] SU_SSsmoothed { get; set; }
         public double[] SU_SSmatch { get; set; }
         public short PiBvalueLog {get; set;}
