@@ -20,6 +20,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using NeuroLoopGainLibrary.Filters;
 using NeuroLoopGainLibrary.Errorhandling;
 using NeuroLoopGainLibrary.Edf;
@@ -34,8 +35,9 @@ namespace NeuroLoopGain
   {
     #region private fields
 
-    //private double Int_Gain_SS, Int_Gain_SU;
-    //private double InGain, PowGain;
+    //private const double ArtifactPhysicalDimensionResolution = 0.001;
+    public const int ArtifactPhysicalDimensionResolution = 1;
+
     private readonly NeuroLoopGainController _appController;
     private DUEFilter DUEfilter;
     private double[] _suForw;
@@ -52,8 +54,8 @@ namespace NeuroLoopGain
     private int MCEventDurationSamples;
     private int MCEventThreshold;
     private double MCjumpThreshold;
-    private double PiBExpInt;
-    private short PiBLogConv;
+    private double _piBxx;
+    private short _logPiBxx;
     private SEFilter SEfilter;
     private double SUsmooth;
     private double SSsmooth;
@@ -62,22 +64,30 @@ namespace NeuroLoopGain
 
     #region private properties
 
-    private short ArtHF { get; set; }
+    private double ArtHF { get; set; }
 
-    private short ArtLF { get; set; }
+    private double ArtLF { get; set; }
 
-    private short ArtZero { get; set; }
+    private double ArtZero { get; set; }
 
-    private short piB
+    private short LogPiBxx
     {
       get
       {
-        return PiBLogConv;
+        return _logPiBxx;
       }
       set
       {
-        PiBLogConv = value;
-        PiBExpInt = MathEx.ExpInteger(PiBLogConv, AppConf.LogFloatY0, AppConf.LogFloatA);
+        _logPiBxx = value;
+        _piBxx = MathEx.ExpInteger(_logPiBxx, AppConf.LogFloatY0, AppConf.LogFloatA);
+      }
+    }
+
+    private double PiBxx
+    {
+      get
+      {
+        return _piBxx;
       }
     }
 
@@ -93,9 +103,11 @@ namespace NeuroLoopGain
     {
       try
       {
-        DUEfilter = new DUEFilter();
-        DUEfilter.Anticipate = true;
-        DUEfilter.BackPolate = 0;
+        DUEfilter = new DUEFilter
+        {
+          Anticipate = true,
+          BackPolate = 0
+        };
         DUEfilter.Setting[1].Value = IIR_fCompute;                    // Sample Frequency
         // If we are reading calibrated and not raw data, gain has to be multiplied
         //  by (2*High(SmallInt)/(FullRangePhysiMax-FullRangePhysiMin))
@@ -144,11 +156,12 @@ namespace NeuroLoopGain
         }
 
         // Update header information
-        for (int k = 1; k <= 14; k++)
-            OutputEDFFile.SignalInfo[NumOutputSignals - k].TransducerType =
-              string.Format(CultureInfo.InvariantCulture, "fCompute/fc/f0/B={0:0.###}/{1:0.###}/{2:0.###}/{3:0.###}Hz.", IIR_fCompute, AppConf.FC,
-                            AppConf.F0, AppConf.BandWidth);
-          
+        //for (int k = 1; k <= 14; k++)
+        for (int k = MCOutputSignalIndex.SU; k <= MCOutputSignalIndex.MCevent; k++)
+          OutputEDFFile.SignalInfo[k].TransducerType =
+            string.Format(CultureInfo.InvariantCulture, "fCompute/fc/f0/B={0:0.###}/{1:0.###}/{2:0.###}/{3:0.###}Hz.", IIR_fCompute, AppConf.FC,
+                          AppConf.F0, AppConf.BandWidth);
+
         //TODO: Review this
         /*Format(
           'sign*LN[sign*(%s)/(%s)]/(%s) '+
@@ -160,10 +173,10 @@ namespace NeuroLoopGain
                                                                         "sign*LN[sign*({0,-8})/({1,-8})]/({2,-8}) (Kemp:J Sleep Res 1998-supp2:132)",
                                                                         "uV**2/x", AppConf.LogFloatY0, AppConf.LogFloatA);
         OutputEDFFile.SignalInfo[2].PreFilter = OutputEDFFile.SignalInfo[1].PreFilter;*/
-        OutputEDFFile.SignalInfo[NumOutputSignals - 14].PreFilter = string.Format(CultureInfo.InvariantCulture,
+        OutputEDFFile.SignalInfo[MCOutputSignalIndex.SU].PreFilter = string.Format(CultureInfo.InvariantCulture,
                                                                       "sign*LN[sign*({0,-8})/({1,-8})]/({2,-8}) (Kemp:J Sleep Res 1998-supp2:132)",
                                                                       "uV**2/x", AppConf.LogFloatY0, AppConf.LogFloatA);
-        OutputEDFFile.SignalInfo[NumOutputSignals - 13].PreFilter = OutputEDFFile.SignalInfo[NumOutputSignals - 14].PreFilter;
+        OutputEDFFile.SignalInfo[MCOutputSignalIndex.SS].PreFilter = OutputEDFFile.SignalInfo[MCOutputSignalIndex.SU].PreFilter;
       }
       catch (Exception e)
       {
@@ -181,9 +194,11 @@ namespace NeuroLoopGain
     {
       try
       {
-        SEfilter = new SEFilter();
-        SEfilter.Anticipate = false;
-        SEfilter.BackPolate = AppConf.IIRBackPolate;
+        SEfilter = new SEFilter
+        {
+          Anticipate = false,
+          BackPolate = AppConf.IIRBackPolate
+        };
         SEfilter.Setting[1].Value = IIR_fCompute;                     // Sample Frequency
         // Because we are reading calibrated and not raw data, gain has to be multiplied
         //  by 1/DigiToPhysiGain
@@ -206,7 +221,9 @@ namespace NeuroLoopGain
     /// <summary>
     /// Checks the MicroContinuity analysis parameters.
     /// </summary>
-    /// <returns><c>true</c> if all parameters are ok</returns>
+    /// <returns>
+    ///   <c>true</c> if all parameters are ok
+    /// </returns>
     private bool MCSmooth_CheckSettings()
     {
       try
@@ -220,8 +237,8 @@ namespace NeuroLoopGain
         //TODO: Review the following modifications in order to allow higher output sampling rate
         if (AppConf.MCEventDuration < 1)
           AppError.Add(string.Format("MCEventDuration = {0} but should be >= 1", AppConf.MCEventDuration), NeuroLoopGainController.DefaultErrorMessageId);
-        if (PiBExpInt < AppConf.LogFloatY0 * 10)
-          AppError.Add(string.Format("piB = {0} is smaller than LogFloat_Y0*10", PiBExpInt), NeuroLoopGainController.DefaultErrorMessageId);
+        if (PiBxx < AppConf.LogFloatY0 * 10)
+          AppError.Add(string.Format("piB = {0} is smaller than LogFloat_Y0*10", PiBxx), NeuroLoopGainController.DefaultErrorMessageId);
         if (AppConf.MicGain < 1.0)
           AppError.Add(string.Format("MCgain = {0} but should be >= 1.0", AppConf.MicGain), NeuroLoopGainController.DefaultErrorMessageId);
         if ((AppConf.SmoothRate <= 0.0) || (AppConf.SmoothRate >= 1.0))
@@ -251,25 +268,25 @@ namespace NeuroLoopGain
         _ssForw[k] = _ssForw[k - 1];
         _ssBack[k] = _ssBack[k - 1];
       }
-      _suForw[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffsets[3] + dataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA); //SU+
-      _suBack[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffsets[4] + dataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA); //SU-
-      _ssForw[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffsets[5] + dataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA); //SS+
-      _ssBack[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffsets[6] + dataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA); //SS-
+      _suForw[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SUplus] + dataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA); //SU+
+      _suBack[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SUminus] + dataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA); //SU-
+      _ssForw[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SSplus] + dataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA); //SS+
+      _ssBack[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SSminus] + dataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA); //SS-
       if (forwardProcessing)
       {
         // Temporary storage in file in space for MCjump and MCevent (respectively)
         /*
-        outBuffer[outputBufferOffsets[13] + dataBlockSample] = MathEx.LogFloat((FSUback[appConf.MCEventDuration] - FSUforw[appConf.MCEventDuration]) / 2, appConf.LogFloatY0, appConf.LogFloatA);
-        outBuffer[outputBufferOffsets[14] + dataBlockSample] = MathEx.LogFloat((FSSback[appConf.MCEventDuration] + FSSforw[appConf.MCEventDuration]) / 2, appConf.LogFloatY0, appConf.LogFloatA);
+        outBuffer[OutputBufferOffset[MCOutputSignalIndex.MCjump] + dataBlockSample] = MathEx.LogFloat((FSUback[appConf.MCEventDuration] - FSUforw[appConf.MCEventDuration]) / 2, appConf.LogFloatY0, appConf.LogFloatA);
+        outBuffer[OutputBufferOffset[MCOutputSignalIndex.MCevent] + dataBlockSample] = MathEx.LogFloat((FSSback[appConf.MCEventDuration] + FSSforw[appConf.MCEventDuration]) / 2, appConf.LogFloatY0, appConf.LogFloatA);
         */
         //TODO: Review the following modifications in order to allow higher output sampling rate
-        outBuffer[OutputBufferOffsets[13] + dataBlockSample] = MathEx.LogFloat((_suBack[MCEventDurationSamples] - _suForw[MCEventDurationSamples]) / 2, AppConf.LogFloatY0, AppConf.LogFloatA);
-        outBuffer[OutputBufferOffsets[14] + dataBlockSample] = MathEx.LogFloat((_ssBack[MCEventDurationSamples] + _ssForw[MCEventDurationSamples]) / 2, AppConf.LogFloatY0, AppConf.LogFloatA);
+        outBuffer[OutputBufferOffset[MCOutputSignalIndex.MCjump] + dataBlockSample] = MathEx.LogFloat((_suBack[MCEventDurationSamples] - _suForw[MCEventDurationSamples]) / 2, AppConf.LogFloatY0, AppConf.LogFloatA);
+        outBuffer[OutputBufferOffset[MCOutputSignalIndex.MCevent] + dataBlockSample] = MathEx.LogFloat((_ssBack[MCEventDurationSamples] + _ssForw[MCEventDurationSamples]) / 2, AppConf.LogFloatY0, AppConf.LogFloatA);
       }
       else
       {
-        double r = MathEx.ExpInteger(outBuffer[OutputBufferOffsets[13] + dataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
-        double s = MathEx.ExpInteger(outBuffer[OutputBufferOffsets[14] + dataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
+        double r = MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.MCjump] + dataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
+        double s = MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.MCevent] + dataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
         /*
         r += (FSUforw[appConf.MCEventDuration] - FSUback[appConf.MCEventDuration]) / 2;
         s += (FSSforw[appConf.MCEventDuration] + FSSback[appConf.MCEventDuration]) / 2;
@@ -279,8 +296,8 @@ namespace NeuroLoopGain
         s += (_ssForw[MCEventDurationSamples] + _ssBack[MCEventDurationSamples]) / 2;
         double mcEvent = Range.EnsureRange(100 * AppConf.MicGain * r / s, -short.MaxValue, short.MaxValue);
         // Clean MCJump from this temporary storage necessary for MCevent
-        outBuffer[OutputBufferOffsets[13] + dataBlockSample] = 0;
-        outBuffer[OutputBufferOffsets[14] + dataBlockSample] = (short)MathEx.RoundNearest(mcEvent);
+        outBuffer[OutputBufferOffset[MCOutputSignalIndex.MCjump] + dataBlockSample] = 0;
+        outBuffer[OutputBufferOffset[MCOutputSignalIndex.MCevent] + dataBlockSample] = (short)MathEx.RoundNearest(mcEvent);
       }
       /* BK 22.3.96: event detection as below stronger discriminate
          bigger from smaller K-complexes. However, the small ones are
@@ -317,7 +334,7 @@ namespace NeuroLoopGain
           LastMCJump.SampleNr = fileSampleNr;
           LastMCJump.Size = MCjumpThreshold;
         }
-        double mcJump = outBuffer[OutputBufferOffsets[13] + dataBlockSample];
+        double mcJump = outBuffer[OutputBufferOffset[MCOutputSignalIndex.MCjump] + dataBlockSample];
         if (Math.Abs(mcJump) >= Math.Abs(LastMCJump.Size))
         {
           LastMCJump.Processed = false;
@@ -338,8 +355,8 @@ namespace NeuroLoopGain
             OutputEDFFile.ReadDataBlock(idataBlock);
             // Reset backward smoother to 'past' forward-smoothed state
             // TODO: Check if next line is still valid for the case of MCEventDuration > 1
-            _suBack[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffsets[3] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA); // SU+ 
-            _ssBack[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffsets[5] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA); // SS+
+            _suBack[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SUplus] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA); // SU+ 
+            _ssBack[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SSplus] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA); // SS+
             SUsmooth = _suBack[0];
             SSsmooth = _ssBack[0];
             // Go to jump (at m) but preserve 1 sample of the jump
@@ -352,7 +369,10 @@ namespace NeuroLoopGain
           }
         }
       }
-      n = Math.Min(fileSampleNr - ifileSampleNr, MaxSamplesHalfJump); // Reset jump-sample counter
+
+      // Reset jump-sample counter
+      n = Math.Min(fileSampleNr - ifileSampleNr, MaxSamplesHalfJump);
+
       while (ifileSampleNr >= fileSampleNr)
       {
         if (idataBlockSample == -1)
@@ -362,29 +382,34 @@ namespace NeuroLoopGain
           OutputEDFFile.ReadDataBlock(idataBlock);
           idataBlockSample = MCsignalsBlockSamples - 1;
         }
-        bool artifact = ((outBuffer[OutputBufferOffsets[9] + idataBlockSample] > 0) || (outBuffer[OutputBufferOffsets[10] + idataBlockSample] > 0) || (outBuffer[OutputBufferOffsets[11] + idataBlockSample] > 0) || (Math.Abs(outBuffer[OutputBufferOffsets[14] + idataBlockSample]) > MCEventThreshold));
+
+        bool artifact = ((outBuffer[OutputBufferOffset[MCOutputSignalIndex.HFart] + idataBlockSample] > 0) ||
+                         (outBuffer[OutputBufferOffset[MCOutputSignalIndex.LFart] + idataBlockSample] > 0) ||
+                         (outBuffer[OutputBufferOffset[MCOutputSignalIndex.MissingSignal] + idataBlockSample] > 0) ||
+                         (Math.Abs(outBuffer[OutputBufferOffset[MCOutputSignalIndex.MCevent] + idataBlockSample]) > MCEventThreshold));
+
         if ((resetAtJumps) && (n > 0))
         {
           artifact = true;
           n--;
         }
+
         // SU and SS back-smoothed into SU- and SS-
         double s;
         double r;
-        MCSmooth_SmoothSUSS(MathEx.ExpInteger(outBuffer[OutputBufferOffsets[1] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA),
-            MathEx.ExpInteger(outBuffer[OutputBufferOffsets[2] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA),
+        MCSmooth_SmoothSUSS(MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SU] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA),
+            MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SS] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA),
             out r, out s, artifact, smoothReset);
-        outBuffer[OutputBufferOffsets[4] + idataBlockSample] = MathEx.LogFloat(r, AppConf.LogFloatY0, AppConf.LogFloatA);
-        outBuffer[OutputBufferOffsets[6] + idataBlockSample] = MathEx.LogFloat(s, AppConf.LogFloatY0, AppConf.LogFloatA);
+        outBuffer[OutputBufferOffset[MCOutputSignalIndex.SUminus] + idataBlockSample] = MathEx.LogFloat(r, AppConf.LogFloatY0, AppConf.LogFloatA);
+        outBuffer[OutputBufferOffset[MCOutputSignalIndex.SSminus] + idataBlockSample] = MathEx.LogFloat(s, AppConf.LogFloatY0, AppConf.LogFloatA);
         smoothReset = false;
         _suBack[1] = _suBack[0];
         _ssBack[1] = _ssBack[0];
-        //FSUback[0] = MathEx.ExpInteger(outBuffer[outputBufferOffsets[4] + idataBlockSample], appConf.LogFloatY0, appConf.LogFloatA);
-        //FSSback[0] = MathEx.ExpInteger(outBuffer[outputBufferOffsets[6] + idataBlockSample], appConf.LogFloatY0, appConf.LogFloatA);
         _suBack[0] = r;
         _ssBack[0] = s;
-        _suForw[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffsets[3] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
-        _ssForw[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffsets[5] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
+        _suForw[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SUplus] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
+        _ssForw[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SSplus] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
+
         // Combine for -and backwards to symmetric SSP, SS0, MC and MCjump
         double ssp = _ssForw[0] + _ssBack[1];
         double mc;
@@ -395,10 +420,11 @@ namespace NeuroLoopGain
         ssp = ssp / 2;
         double ss0 = ssp * (1 - mc);
         mc = Range.EnsureRange(AppConf.MicGain * 100 * mc, -short.MaxValue, short.MaxValue);
+
         // Put symmetric results to disk
-        outBuffer[OutputBufferOffsets[7] + idataBlockSample] = MathEx.LogFloat(ssp, AppConf.LogFloatY0, AppConf.LogFloatA);
-        outBuffer[OutputBufferOffsets[8] + idataBlockSample] = MathEx.LogFloat(ss0, AppConf.LogFloatY0, AppConf.LogFloatA);
-        outBuffer[OutputBufferOffsets[12] + idataBlockSample] = (short)MathEx.RoundNearest(mc);
+        outBuffer[OutputBufferOffset[MCOutputSignalIndex.SSP] + idataBlockSample] = MathEx.LogFloat(ssp, AppConf.LogFloatY0, AppConf.LogFloatA);
+        outBuffer[OutputBufferOffset[MCOutputSignalIndex.SS0] + idataBlockSample] = MathEx.LogFloat(ss0, AppConf.LogFloatY0, AppConf.LogFloatA);
+        outBuffer[OutputBufferOffset[MCOutputSignalIndex.MC] + idataBlockSample] = (short)MathEx.RoundNearest(mc);
         ifileSampleNr--;
         idataBlockSample--;
       }
@@ -430,7 +456,7 @@ namespace NeuroLoopGain
           LastMCJump.SampleNr = fileSampleNr;
           LastMCJump.Size = MCjumpThreshold;
         }
-        mcJump = outBuffer[OutputBufferOffsets[13] + dataBlockSample];
+        mcJump = outBuffer[OutputBufferOffset[MCOutputSignalIndex.MCjump] + dataBlockSample];
         if (Math.Abs(mcJump) >= Math.Abs(LastMCJump.Size))
         {
           LastMCJump.Processed = false;
@@ -450,8 +476,8 @@ namespace NeuroLoopGain
             idataBlock = Math.DivRem(n, MCsignalsBlockSamples, out idataBlockSample);
             OutputEDFFile.ReadDataBlock(idataBlock);
             // Reset forward smoother to 'future' back-smoothed state
-            SUsmooth = MathEx.ExpInteger(outBuffer[OutputBufferOffsets[4] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
-            SSsmooth = MathEx.ExpInteger(outBuffer[OutputBufferOffsets[6] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
+            SUsmooth = MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SUminus] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
+            SSsmooth = MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SSminus] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
             // Go to jump (at m) but preserve 1 sample of the jump
             ifileSampleNr = Math.Min(m, fileSampleNr); // smoother will start at ifileSampleNr = LastJump + 1
             idataBlock = Math.DivRem(ifileSampleNr, MCsignalsBlockSamples, out idataBlockSample);
@@ -472,7 +498,7 @@ namespace NeuroLoopGain
           OutputEDFFile.ReadDataBlock(idataBlock);
           idataBlockSample = 0;
         }
-        bool artifact = ((outBuffer[OutputBufferOffsets[9] + idataBlockSample] > 0) || (outBuffer[OutputBufferOffsets[10] + idataBlockSample] > 0) || (outBuffer[OutputBufferOffsets[11] + idataBlockSample] > 0) || (Math.Abs(outBuffer[OutputBufferOffsets[14] + idataBlockSample]) > MCEventThreshold));
+        bool artifact = ((outBuffer[OutputBufferOffset[MCOutputSignalIndex.HFart] + idataBlockSample] > 0) || (outBuffer[OutputBufferOffset[MCOutputSignalIndex.LFart] + idataBlockSample] > 0) || (outBuffer[OutputBufferOffset[MCOutputSignalIndex.MissingSignal] + idataBlockSample] > 0) || (Math.Abs(outBuffer[OutputBufferOffset[MCOutputSignalIndex.MCevent] + idataBlockSample]) > MCEventThreshold));
         if ((resetAtJumps) && (n > 0))
         {
           artifact = true;
@@ -481,18 +507,16 @@ namespace NeuroLoopGain
         // SU and SS forward-smoothed into SU+ and SS+
         double s;
         double r;
-        MCSmooth_SmoothSUSS(MathEx.ExpInteger(outBuffer[OutputBufferOffsets[1] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA),
-            MathEx.ExpInteger(outBuffer[OutputBufferOffsets[2] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA),
+        MCSmooth_SmoothSUSS(MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SU] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA),
+            MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SS] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA),
             out r, out s, artifact, smoothReset);
-        outBuffer[OutputBufferOffsets[3] + idataBlockSample] = MathEx.LogFloat(r, AppConf.LogFloatY0, AppConf.LogFloatA);
-        outBuffer[OutputBufferOffsets[5] + idataBlockSample] = MathEx.LogFloat(s, AppConf.LogFloatY0, AppConf.LogFloatA);
+        outBuffer[OutputBufferOffset[MCOutputSignalIndex.SUplus] + idataBlockSample] = MathEx.LogFloat(r, AppConf.LogFloatY0, AppConf.LogFloatA);
+        outBuffer[OutputBufferOffset[MCOutputSignalIndex.SSplus] + idataBlockSample] = MathEx.LogFloat(s, AppConf.LogFloatY0, AppConf.LogFloatA);
         smoothReset = false;
         _suForw[1] = _suForw[0];
         _ssForw[1] = _ssForw[0];
-        _suBack[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffsets[4] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
-        _ssBack[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffsets[6] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
-        //FSUforw[0] = MathEx.ExpInteger(outBuffer[outputBufferOffsets[3] + idataBlockSample], appConf.LogFloatY0, appConf.LogFloatA); //TODO: substitute by r (Log conversion always implies a loss)
-        //FSSforw[0] = MathEx.ExpInteger(outBuffer[outputBufferOffsets[5] + idataBlockSample], appConf.LogFloatY0, appConf.LogFloatA); //TODO: substitute by s (Log conversion always implies a loss)
+        _suBack[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SUminus] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
+        _ssBack[0] = MathEx.ExpInteger(outBuffer[OutputBufferOffset[MCOutputSignalIndex.SSminus] + idataBlockSample], AppConf.LogFloatY0, AppConf.LogFloatA);
         _suForw[0] = r;
         _ssForw[0] = s;
         // This MCjump is biased but OK for detection of jumps
@@ -516,7 +540,7 @@ namespace NeuroLoopGain
         if (Math.Abs(MCjump) > short.MaxValue)
             MCjump = Math.Sign(MCjump) * short.MaxValue;*/
         mcJump = Range.EnsureRange(AppConf.MicGain * 100 * mcJump, -short.MaxValue, short.MaxValue);
-        outBuffer[OutputBufferOffsets[13] + idataBlockSample] = (short)MathEx.RoundNearest(mcJump);
+        outBuffer[OutputBufferOffset[MCOutputSignalIndex.MCjump] + idataBlockSample] = (short)MathEx.RoundNearest(mcJump);
         ifileSampleNr++;
         idataBlockSample++;
       }
@@ -527,31 +551,35 @@ namespace NeuroLoopGain
     /// </summary>
     /// <param name="outBuffer">The out buffer.</param>
     /// <param name="sampleIndex">The index of the sample to be cleared.</param>
-    private void MCSmooth_ResetAll(short[] outBuffer, int sampleIndex)
+    private void MCSmooth_ResetAll(IList<short> outBuffer, int sampleIndex)
     {
-      outBuffer[OutputBufferOffsets[3] + sampleIndex] = 0; // SU+
-      outBuffer[OutputBufferOffsets[4] + sampleIndex] = 0; // SU-
-      outBuffer[OutputBufferOffsets[5] + sampleIndex] = 0; // SS+
-      outBuffer[OutputBufferOffsets[6] + sampleIndex] = 0; // SS-
-      outBuffer[OutputBufferOffsets[7] + sampleIndex] = 0; // SSP
-      outBuffer[OutputBufferOffsets[8] + sampleIndex] = 0; // SS0
-      outBuffer[OutputBufferOffsets[9] + sampleIndex] = ArtHF; // ArtHF
-      outBuffer[OutputBufferOffsets[10] + sampleIndex] = ArtLF; // ArtLF
-      outBuffer[OutputBufferOffsets[11] + sampleIndex] = ArtZero; // ArtZero
-      outBuffer[OutputBufferOffsets[12] + sampleIndex] = 0; // MC
-      outBuffer[OutputBufferOffsets[13] + sampleIndex] = 0; // MCjump
-      outBuffer[OutputBufferOffsets[14] + sampleIndex] = 0; // MCevent
+      outBuffer[OutputBufferOffset[MCOutputSignalIndex.SUplus] + sampleIndex] = 0;
+      outBuffer[OutputBufferOffset[MCOutputSignalIndex.SUminus] + sampleIndex] = 0;
+      outBuffer[OutputBufferOffset[MCOutputSignalIndex.SSplus] + sampleIndex] = 0;
+      outBuffer[OutputBufferOffset[MCOutputSignalIndex.SSminus] + sampleIndex] = 0;
+      outBuffer[OutputBufferOffset[MCOutputSignalIndex.SSP] + sampleIndex] = 0;
+      outBuffer[OutputBufferOffset[MCOutputSignalIndex.SS0] + sampleIndex] = 0;
+
+      // todo: Bob controleren HFart, LFart en Artzero ipv 0?
+
+      outBuffer[OutputBufferOffset[MCOutputSignalIndex.HFart] + sampleIndex] = (short)MathEx.RoundNearest(ArtHF / ArtifactPhysicalDimensionResolution);
+      outBuffer[OutputBufferOffset[MCOutputSignalIndex.LFart] + sampleIndex] = (short)MathEx.RoundNearest(ArtLF / ArtifactPhysicalDimensionResolution);
+      outBuffer[OutputBufferOffset[MCOutputSignalIndex.MissingSignal] + sampleIndex] = (short)MathEx.RoundNearest(ArtZero / ArtifactPhysicalDimensionResolution);
+
+      outBuffer[OutputBufferOffset[MCOutputSignalIndex.MC] + sampleIndex] = 0;
+      outBuffer[OutputBufferOffset[MCOutputSignalIndex.MCjump] + sampleIndex] = 0;
+      outBuffer[OutputBufferOffset[MCOutputSignalIndex.MCevent] + sampleIndex] = 0;
     }
 
     /// <summary>
     /// Recursively smooths SUin and SSin
     /// </summary>
-    /// <param name="SUin">The S uin.</param>
-    /// <param name="SSin">The S sin.</param>
-    /// <param name="SUout">The S uout.</param>
-    /// <param name="SSout">The S sout.</param>
-    /// <param name="artifact">if set to <c>true</c> [artifact].</param>
-    /// <param name="smootherReset">if set to <c>true</c> [smoother reset].</param>
+    /// <param name="SUin">The SU input value.</param>
+    /// <param name="SSin">The SS input value.</param>
+    /// <param name="SUout">The SU output value.</param>
+    /// <param name="SSout">The SS output value.</param>
+    /// <param name="artifact">if set to <c>true</c> artifact is present.</param>
+    /// <param name="smootherReset">if set to <c>true</c> reset smoother.</param>
     private void MCSmooth_SmoothSUSS(double SUin, double SSin, out double SUout, out double SSout, bool artifact, bool smootherReset)
     {
       // Recursive smoother of SUin and SSin by updating internal variable by 'smoothrate'
@@ -560,7 +588,7 @@ namespace NeuroLoopGain
       if (smootherReset)
       {
         SUsmooth = 0;
-        SSsmooth = PiBExpInt;
+        SSsmooth = PiBxx;
       }
       if (artifact)
       {
@@ -569,31 +597,31 @@ namespace NeuroLoopGain
         /* Be carefull with changing the following lower limit on SS. These influences
          * the zero-signal detection by ArtZero and XpiBArtZero
          */
-        if (SSsmooth < PiBExpInt)
-          SSsmooth = PiBExpInt;
+        if (SSsmooth < PiBxx)
+          SSsmooth = PiBxx;
       }
       else
       {
         double dSU;
-        if (SUin > -PiBExpInt)
+        if (SUin > -PiBxx)
           dSU = SUin - SUsmooth;
         else
-          dSU = -PiBExpInt - SUsmooth; // Clip SUin at -piB: mitigate artifacts
+          dSU = -PiBxx - SUsmooth; // Clip SUin at -piB: mitigate artifacts
         double dss = SSin - SSsmooth;
         SUsmooth = Math.Max(0, SUsmooth + AppConf.SmoothRate * dSU);
         SSsmooth = SSsmooth + AppConf.SmoothRate * dss;
         /* Be carefull with changing the following lower limit on SS. These influences
          * the zero-signal detection d.m.v. ArtZero and XpiBArtZero
          */
-        if (SSsmooth < PiBExpInt)
-          SSsmooth = PiBExpInt;
+        if (SSsmooth < PiBxx)
+          SSsmooth = PiBxx;
       }
       SUout = SUsmooth;
       SSout = SSsmooth;
     }
 
     /// <summary>
-    /// Update the artifacts.
+    /// Update the HF, LF and missing-signal artifacts.
     /// </summary>
     /// <param name="smoothReset">if set to <c>true</c> reset the smoother.</param>
     /// <param name="ss">The SS.</param>
@@ -606,40 +634,51 @@ namespace NeuroLoopGain
         ArtLF = 0;
         ArtZero = 0;
       }
-      double artFactor = (ss - su - PiBExpInt) / PiBExpInt;
+
+      double artFactor = (ss - su - PiBxx) / PiBxx;
       artFactor = Range.EnsureRange(artFactor, -1000, 1000); // Avoid overflow of ArtHF
+
       if (artFactor >= AppConf.XpiBPlus) // XpiBPlus >= 1
 
-        ArtHF += (short)MathEx.RoundNearest(artFactor / AppConf.XpiBPlus);
+        // todo: Bob controleren ArtHF, ArtLF en ArtZero: eerst afronden daarna *SmoothTime ?
+
+        ArtHF += MathEx.RoundNearest(artFactor / AppConf.XpiBPlus) * AppConf.SmoothTime;
+
+      //ArtHF += (short)MathEx.RoundNearest(artFactor / AppConf.XpiBPlus);
       else
       {
-        ArtHF--;
-        //TODO: Consider the following modifications in order to allow higher output sampling rate
-        //ArtHF -= appConf.SmoothTime;
+        //ArtHF--;
+        ArtHF -= AppConf.SmoothTime;
       }
-      ArtHF = (short)Range.EnsureRange(ArtHF, 0, AppConf.ArtMaxSeconds);
+
+      //ArtHF = (short)Range.EnsureRange(ArtHF, 0, AppConf.ArtMaxSeconds);
+      ArtHF = Range.EnsureRange(ArtHF, 0, AppConf.ArtMaxSeconds);
+
       if (artFactor <= AppConf.XpiBMinus) //XpiBMinus <= -1
 
-        ArtLF += (short)MathEx.RoundNearest(artFactor / AppConf.XpiBMinus);
+        ArtLF += MathEx.RoundNearest(artFactor / AppConf.XpiBMinus) * AppConf.SmoothTime;
+      //ArtLF += (short)MathEx.RoundNearest(artFactor / AppConf.XpiBMinus);
       else
       {
-        ArtLF--;
-        //TODO: Consider the following modifications in order to allow higher output sampling rate
-        //ArtLF -= appConf.SmoothTime;
+        //ArtLF--;
+        ArtLF -= AppConf.SmoothTime;
       }
-      ArtLF = (short)Range.EnsureRange(ArtLF, 0, AppConf.ArtMaxSeconds);
-      if (ss <= PiBExpInt / AppConf.XpiBZero) //XpiBArtZero >= 1
+
+      //ArtLF = (short)Range.EnsureRange(ArtLF, 0, AppConf.ArtMaxSeconds);
+      ArtLF = Range.EnsureRange(ArtLF, 0, AppConf.ArtMaxSeconds);
+
+      if (ss <= PiBxx / AppConf.XpiBZero) //XpiBArtZero >= 1
       {
         //ArtZero++;
-        ArtZero += (short)MathEx.RoundNearest((PiBExpInt / AppConf.XpiBZero) - ss);
+        ArtZero += (short)MathEx.RoundNearest((PiBxx / AppConf.XpiBZero) - ss) * AppConf.SmoothTime;
       }
       else
       {
-        ArtZero--;
-        //TODO: Consider the following modifications in order to allow higher output sampling rate
-        //ArtZero -= appConf.SmoothTime;
+        //ArtZero--;
+        ArtZero -= AppConf.SmoothTime;
       }
-      ArtZero = (short)Range.EnsureRange(ArtZero, 0, Math.Min(1, AppConf.SmoothTime));
+      //ArtZero = (short)Range.EnsureRange(ArtZero, 0, Math.Min(1, AppConf.SmoothTime));
+      ArtZero = Range.EnsureRange(ArtZero, 0, Math.Min(1, AppConf.SmoothTime));
     }
 
     #endregion Event handlers
@@ -657,11 +696,11 @@ namespace NeuroLoopGain
       AppError.Clear();
 
       ProgressBarForm pbf = new ProgressBarForm
-                              {
-                                ShowInTaskbar = false,
-                                Progress = {Minimum = 0, Maximum = 100, Step = 1, Value = 0},
-                                Message = "Reading input signal..."
-                              };
+      {
+        ShowInTaskbar = false,
+        Progress = { Minimum = 0, Maximum = 100, Step = 1, Value = 0 },
+        Message = "Reading input signal..."
+      };
       pbf.Show();
       Application.DoEvents();
 
@@ -670,10 +709,11 @@ namespace NeuroLoopGain
       {
         // Copy input signal to output file if requested.
         if (AppConf.CopyInputSignal)
-            result = TranslateInputSignal();
+          result = TranslateInputSignal();
 
         pbf.Progress.Value = 5;
         Application.DoEvents();
+
         if (result)
         {
           pbf.Message = "Performing SU and SS reduction...";
@@ -682,6 +722,7 @@ namespace NeuroLoopGain
           pbf.Progress.Value = 30;
           Application.DoEvents();
         }
+
         if (result)
         {
           pbf.Message = "Computing PiB value...";
@@ -691,6 +732,7 @@ namespace NeuroLoopGain
           pbf.Progress.Value = 50;
           Application.DoEvents();
         }
+
         if (result)
         {
           pbf.Message = "Detecting artifacts...";
@@ -758,23 +800,17 @@ namespace NeuroLoopGain
         //TODO: Review this
 
         // Update filtering header information for artifact traces
-        OutputEDFFile.SignalInfo[NumOutputSignals - 6].PreFilter = string.Format("Detected when [[SS-SU-piB] div piB]" +
-        ">={0:#.###} with physical piB={1:#.##}", AppConf.XpiBPlus, PiBExpInt);
-        //((EdfSignalInfoBase)outputEDFFile.SignalInfo[9]).PhysiDim = ((EdfSignalInfoBase)outputEDFFile.SignalInfo[1)).PhysiDim;
-        OutputEDFFile.SignalInfo[NumOutputSignals - 6].PhysiDim = string.Format(CultureInfo.InvariantCulture, "at {0:#.#}Hz", OutputEDFFile.FileInfo.SampleRecDuration / OutputEDFFile.SignalInfo[NumOutputSignals - 6].NrSamples);
-        //((EdfSignalInfoBase)outputEDFFile.SignalInfo[9]).PhysiDim = "s";
+        OutputEDFFile.SignalInfo[MCOutputSignalIndex.HFart].PreFilter = string.Format("Detected when [[SS-SU-piB] div piB]" +
+        ">={0:#.###} with physical piB={1:#.##}", AppConf.XpiBPlus, PiBxx);
+        OutputEDFFile.SignalInfo[MCOutputSignalIndex.HFart].PhysiDim = string.Format(CultureInfo.InvariantCulture, "at {0:#.#}Hz", OutputEDFFile.FileInfo.SampleRecDuration / OutputEDFFile.SignalInfo[MCOutputSignalIndex.HFart].NrSamples);
 
-        OutputEDFFile.SignalInfo[NumOutputSignals - 5].PreFilter = string.Format("Detected when [[SS-SU-piB] div piB]" +
-        "<={0:#.###} with physical piB={1:#.##}", AppConf.XpiBMinus, PiBExpInt);
-        //((EdfSignalInfoBase)outputEDFFile.SignalInfo[10]).PhysiDim = ((EdfSignalInfoBase)outputEDFFile.SignalInfo[1)).PhysiDim;
-        OutputEDFFile.SignalInfo[NumOutputSignals - 5].PhysiDim = string.Format(CultureInfo.InvariantCulture, "at {0:#.#}Hz", OutputEDFFile.FileInfo.SampleRecDuration / OutputEDFFile.SignalInfo[NumOutputSignals - 5].NrSamples);
-        //((EdfSignalInfoBase)outputEDFFile.SignalInfo[10]).PhysiDim = "s";
+        OutputEDFFile.SignalInfo[MCOutputSignalIndex.LFart].PreFilter = string.Format("Detected when [[SS-SU-piB] div piB]" +
+        "<={0:#.###} with physical piB={1:#.##}", AppConf.XpiBMinus, PiBxx);
+        OutputEDFFile.SignalInfo[MCOutputSignalIndex.LFart].PhysiDim = string.Format(CultureInfo.InvariantCulture, "at {0:#.#}Hz", OutputEDFFile.FileInfo.SampleRecDuration / OutputEDFFile.SignalInfo[MCOutputSignalIndex.LFart].NrSamples);
 
-        OutputEDFFile.SignalInfo[NumOutputSignals - 4].PreFilter = string.Format("Detected when [piB div [SS]] >={0:#.###} " +
-        "with physical piB={1:#.##}", AppConf.XpiBZero, PiBExpInt);
-        //((EdfSignalInfoBase)outputEDFFile.SignalInfo[11]).PhysiDim = ((EdfSignalInfoBase)outputEDFFile.SignalInfo[1]).PhysiDim;
-        OutputEDFFile.SignalInfo[NumOutputSignals - 4].PhysiDim = string.Format(CultureInfo.InvariantCulture, "at {0:#.#}Hz", OutputEDFFile.FileInfo.SampleRecDuration / OutputEDFFile.SignalInfo[NumOutputSignals - 4].NrSamples);
-        //((EdfSignalInfoBase)outputEDFFile.SignalInfo[11]).PhysiDim = "s";
+        OutputEDFFile.SignalInfo[MCOutputSignalIndex.MissingSignal].PreFilter = string.Format("Detected when [piB div [SS]] >={0:#.###} " +
+        "with physical piB={1:#.##}", AppConf.XpiBZero, PiBxx);
+        OutputEDFFile.SignalInfo[MCOutputSignalIndex.MissingSignal].PhysiDim = string.Format(CultureInfo.InvariantCulture, "at {0:#.#}Hz", OutputEDFFile.FileInfo.SampleRecDuration / OutputEDFFile.SignalInfo[MCOutputSignalIndex.MissingSignal].NrSamples);
 
         OutputEDFFile.CommitChanges();
 
@@ -828,27 +864,27 @@ namespace NeuroLoopGain
         // Update header information for SSP, SS0, MC, MCJump and MCEvent
 
         //SSP
-          EdfSignalInfoBase signalInfo = OutputEDFFile.SignalInfo[NumOutputSignals - 8];
+        EdfSignalInfoBase signalInfo = OutputEDFFile.SignalInfo[MCOutputSignalIndex.SSP];
         signalInfo.TransducerType = string.Format(CultureInfo.InvariantCulture, "{0} Smootherrate={1:0.######}/s", signalInfo.TransducerType, AppConf.SmoothRate);
-        signalInfo.PreFilter = OutputEDFFile.SignalInfo[NumOutputSignals - 13].PreFilter;
+        signalInfo.PreFilter = OutputEDFFile.SignalInfo[MCOutputSignalIndex.SS].PreFilter;
 
         //SS0
-        signalInfo = OutputEDFFile.SignalInfo[NumOutputSignals - 7];
+        signalInfo = OutputEDFFile.SignalInfo[MCOutputSignalIndex.SS0];
         signalInfo.TransducerType = string.Format(CultureInfo.InvariantCulture, "{0} Smootherrate={1:0.######}/s", signalInfo.TransducerType, AppConf.SmoothRate);
-        signalInfo.PreFilter = OutputEDFFile.SignalInfo[NumOutputSignals - 13].PreFilter;
+        signalInfo.PreFilter = OutputEDFFile.SignalInfo[MCOutputSignalIndex.SS].PreFilter;
 
         //MC (Gain)
-        signalInfo = OutputEDFFile.SignalInfo[NumOutputSignals - 3];
+        signalInfo = OutputEDFFile.SignalInfo[MCOutputSignalIndex.MC];
         signalInfo.TransducerType = string.Format(CultureInfo.InvariantCulture, "{0} Smootherrate={1:0.######}/s", signalInfo.TransducerType, AppConf.SmoothRate);
-        signalInfo.PreFilter = string.Format("Microcontinuity (Method B.Kemp) physical piB={0:.##}", PiBExpInt);
+        signalInfo.PreFilter = string.Format("Microcontinuity (Method B.Kemp) physical piB={0:.##}", PiBxx);
 
         //MCJump (GainJump)
-        signalInfo = OutputEDFFile.SignalInfo[NumOutputSignals - 2];
+        signalInfo = OutputEDFFile.SignalInfo[MCOutputSignalIndex.MCjump];
         signalInfo.TransducerType = string.Format(CultureInfo.InvariantCulture, "{0} Smootherrate={1:0.######}/s", signalInfo.TransducerType, AppConf.SmoothRate);
         signalInfo.PreFilter = "Microcontinuity jump = 100 * [[SU-/SS-] - [SU+/SS+]]";
 
         //MCEvent (GainEvent)
-        signalInfo = OutputEDFFile.SignalInfo[NumOutputSignals - 1];
+        signalInfo = OutputEDFFile.SignalInfo[MCOutputSignalIndex.MCevent];
         signalInfo.TransducerType = string.Format(CultureInfo.InvariantCulture, "{0} Smootherrate={1:0.######}/s", signalInfo.TransducerType, AppConf.SmoothRate);
         /*
         signalInfo.PreFilter = string.Format("Microcontinuity event <= {0:##}s", appConf.MCEventDuration);
@@ -874,7 +910,7 @@ namespace NeuroLoopGain
     /// <returns><c>true</c> if successful</returns>
     private bool DoDetectPiB()
     {
-      short[] sssu = new short[AppConf.SS_SUmax - AppConf.SS_SUmin + 1];
+      int[] sssu = new int[AppConf.SS_SUmax - AppConf.SS_SUmin + 1];
       double[] sssuSmoothed = new double[AppConf.SS_SUmax - AppConf.SS_SUmin + 1];
       double[] sssuTemplate = new double[AppConf.piBCorrelationFunctionBufferSize];
       double[] sssuMatch = new double[AppConf.SS_SUmax - AppConf.SS_SUmin + 1];
@@ -887,21 +923,22 @@ namespace NeuroLoopGain
 
       int dataBlockSamples = OutputEDFFile.SignalInfo[1].NrSamples;
 
+      // Create SS-SU histogram
       for (int k = 0; k < OutputEDFFile.FileInfo.NrDataRecords; k++)
       {
         OutputEDFFile.ReadDataBlock(k);
 
         for (int k1 = 0; k1 < dataBlockSamples; k1++)
         {
-          double su = MathEx.ExpInteger(OutputEDFFile.DataBuffer[OutputBufferOffsets[1] + k1], AppConf.LogFloatY0, AppConf.LogFloatA);
-          double ss = MathEx.ExpInteger(OutputEDFFile.DataBuffer[OutputBufferOffsets[2] + k1], AppConf.LogFloatY0, AppConf.LogFloatA);
+          double su = MathEx.ExpInteger(OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.SU] + k1], AppConf.LogFloatY0, AppConf.LogFloatA);
+          double ss = MathEx.ExpInteger(OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.SS] + k1], AppConf.LogFloatY0, AppConf.LogFloatA);
 
           // Do not add zeros from unrecorded end of file
           if ((Math.Abs(su) >= AppConf.LogFloatY0) || (Math.Abs(ss) >= AppConf.LogFloatY0))
           {
             short j = MathEx.LogFloat(ss - su, AppConf.LogFloatY0, AppConf.LogFloatA);
             //Watch it! SS_SUmin and SS_SUmax now refer to log-transformed values
-            if (Range.InRange(j, AppConf.SS_SUmin, AppConf.SS_SUmax) && (sssu[j - AppConf.SS_SUmin] < short.MaxValue) && (j != 0))
+            if (Range.InRange(j, AppConf.SS_SUmin, AppConf.SS_SUmax) && (sssu[j - AppConf.SS_SUmin] < int.MaxValue) && (j != 0))
               sssu[j - AppConf.SS_SUmin]++;
           }
         }
@@ -923,6 +960,8 @@ namespace NeuroLoopGain
         sssuSmoothed[k] = sssuSmoothed[k] / (2 * sssuSmootherWidth + 1);
       }
 
+      // todo: Marco: "gewoon" maximum zoeken, geen moeilijke functies.
+
       // Construct the template to detect desired piB value peak in the smoothed histogram
       for (int k = 1; k < sssuTemplate.Length - 1; k++)
       {
@@ -932,6 +971,7 @@ namespace NeuroLoopGain
             (MathEx.Heav(x) - MathEx.Heav(x - Math.PI / 2)) * (Math.Sin(2 * x) / (2 * x));
         sssuTemplate[k] = value;
       }
+
       // Calculate and substract template mean value and calculate resulting template's peak index
       x = MathEx.Average(sssuTemplate);
       value = 0;
@@ -955,7 +995,7 @@ namespace NeuroLoopGain
         sssuMatch[k + templatePeakIdx] = value;
       }
 
-      piB = 0;
+      LogPiBxx = 0;
       double peak = 0;
       // We'll take Pi*B as the x-value for the maximum correlation point
       for (int k = 0; k < sssuMatch.Length; k++)
@@ -964,7 +1004,7 @@ namespace NeuroLoopGain
         {
           peak = sssuMatch[k];
           //piB = (short)Range.EnsureRange(k + appConf.SS_SUmin, -short.MaxValue, short.MaxValue);
-          piB = (short)(k + AppConf.SS_SUmin);
+          LogPiBxx = (short)(k + AppConf.SS_SUmin);
         }
       }
 
@@ -973,27 +1013,23 @@ namespace NeuroLoopGain
       if (AppConf.ShowPiBHistogram)
       {
         HistogramInfo histogramInfo = new HistogramInfo
-                                        {
-                                          FileName = InputEDFFileName,
-                                          SignalLabel = InputEDFFile.SignalInfo[InputSignalSelected].SignalLabel,
-                                          SS_SUmax = AppConf.SS_SUmax,
-                                          SS_SUmin = AppConf.SS_SUmin,
-                                          SU_SS = sssu,
-                                          SU_SSsmoothed = sssuSmoothed,
-                                          UnderSampling = AppConf.IIRUnderSampler,
-                                          SU_SSmatch = sssuMatch,
-                                          F0 = AppConf.F0,
-                                          FC = AppConf.FC,
-                                          B = AppConf.BandWidth,
-                                          PiBvalueLog = piB,
-                                          PiBvaluePhysi = PiBExpInt,
-                                          SmoothRate = AppConf.SmoothRate,
-                                          SmoothTime = AppConf.SmoothTime
-                                        };
-        //histogramInfo.PiBvalueDigi = (short)PiBExpInt;
-        //histogramInfo.PiBvalueDigi = PiBExpInt;
-        //histogramInfo.PiBvaluePhysi = PiBExpInt / PowGain;
-
+        {
+          FileName = InputEDFFileName,
+          SignalLabel = InputEDFFile.SignalInfo[InputSignalSelected].SignalLabel,
+          SS_SUmax = AppConf.SS_SUmax,
+          SS_SUmin = AppConf.SS_SUmin,
+          SU_SS = sssu,
+          SU_SSsmoothed = sssuSmoothed,
+          UnderSampling = AppConf.IIRUnderSampler,
+          SU_SSmatch = sssuMatch,
+          F0 = AppConf.F0,
+          FC = AppConf.FC,
+          B = AppConf.BandWidth,
+          PiBvalueLog = LogPiBxx,
+          PiBvaluePhysi = PiBxx,
+          SmoothRate = AppConf.SmoothRate,
+          SmoothTime = AppConf.SmoothTime
+        };
 
         FormPiBHistogram formHistogram = new FormPiBHistogram();
         formHistogram.SetHistogramInfo(histogramInfo);
@@ -1026,24 +1062,24 @@ namespace NeuroLoopGain
         // Update header information for SU+, SU-, SS+, SS- 
 
         //SU+
-          EdfSignalInfoBase signalInfo = OutputEDFFile.SignalInfo[NumOutputSignals - 12];
+        EdfSignalInfoBase signalInfo = OutputEDFFile.SignalInfo[MCOutputSignalIndex.SUplus];
         signalInfo.TransducerType = string.Format(CultureInfo.InvariantCulture, "{0} Smootherrate={1:0.######}/s", signalInfo.TransducerType, AppConf.SmoothRate);
-        signalInfo.PreFilter = OutputEDFFile.SignalInfo[NumOutputSignals - 13].PreFilter;
+        signalInfo.PreFilter = OutputEDFFile.SignalInfo[MCOutputSignalIndex.SS].PreFilter;
 
         //SU-
-        signalInfo = OutputEDFFile.SignalInfo[NumOutputSignals - 11];
+        signalInfo = OutputEDFFile.SignalInfo[MCOutputSignalIndex.SUminus];
         signalInfo.TransducerType = string.Format(CultureInfo.InvariantCulture, "{0} Smootherrate={1:0.######}/s", signalInfo.TransducerType, AppConf.SmoothRate);
-        signalInfo.PreFilter = OutputEDFFile.SignalInfo[NumOutputSignals - 13].PreFilter;
+        signalInfo.PreFilter = OutputEDFFile.SignalInfo[MCOutputSignalIndex.SS].PreFilter;
 
         //SS+
-        signalInfo = OutputEDFFile.SignalInfo[NumOutputSignals - 10];
+        signalInfo = OutputEDFFile.SignalInfo[MCOutputSignalIndex.SSplus];
         signalInfo.TransducerType = string.Format(CultureInfo.InvariantCulture, "{0} Smootherrate={1:0.######}/s", signalInfo.TransducerType, AppConf.SmoothRate);
-        signalInfo.PreFilter = OutputEDFFile.SignalInfo[NumOutputSignals - 13].PreFilter;
+        signalInfo.PreFilter = OutputEDFFile.SignalInfo[MCOutputSignalIndex.SS].PreFilter;
 
         //SS-
-        signalInfo = OutputEDFFile.SignalInfo[NumOutputSignals - 9];
+        signalInfo = OutputEDFFile.SignalInfo[MCOutputSignalIndex.SSminus];
         signalInfo.TransducerType = string.Format(CultureInfo.InvariantCulture, "{0} Smootherrate={1:0.######}/s", signalInfo.TransducerType, AppConf.SmoothRate);
-        signalInfo.PreFilter = OutputEDFFile.SignalInfo[NumOutputSignals - 13].PreFilter;
+        signalInfo.PreFilter = OutputEDFFile.SignalInfo[MCOutputSignalIndex.SS].PreFilter;
 
         OutputEDFFile.CommitChanges();
 
@@ -1068,7 +1104,7 @@ namespace NeuroLoopGain
           DoComputeSE_InitializeFilter())
       {
         int inputSamples = InputEDFFile.SignalInfo[InputSignalSelected].NrSamples;
-        
+
         double[] IIR_Input;
         double[] IIR_OutDU;
         double[] IIR_OutSE;
@@ -1089,7 +1125,7 @@ namespace NeuroLoopGain
         IIR_OutSE.Fill(0);
 
         int outRecSample = 0;
-        int underSample = 1; // underSample: 1..IIR_UnderSamler
+        int underSample = 1; // underSample: 1..IIR_UnderSampler
         double SSactualSample = 0;
         double SUactualSample = 0;
         double integratedTime = 0;
@@ -1101,7 +1137,7 @@ namespace NeuroLoopGain
         int currentOutputRecord = 0;
         if (AppConf.CopyInputSignal)
         {
-            OutputEDFFile.ReadDataBlock(currentOutputRecord);
+          OutputEDFFile.ReadDataBlock(currentOutputRecord);
         }
         for (int k = 0; k < totalRecords; k++)
         {
@@ -1111,6 +1147,7 @@ namespace NeuroLoopGain
           IIR_Input.Fill(0);
           int IIR_LastSample = 0;
 
+          // Apply the undersampling; result stored in IIR_Input, index [0...IIR_LastSample]
           for (int k1 = 0; k1 < inputSamples; k1++)
           {
             if (underSample == AppConf.IIRUnderSampler)
@@ -1125,51 +1162,54 @@ namespace NeuroLoopGain
           }
           IIR_LastSample--;
 
+          // Filter the undersampled input samples to IIR_OutDU and IIR_OutSE
           DUEfilter.FilterSamples(IIR_Input, IIR_OutDU, 0, IIR_LastSample, 0);
           SEfilter.FilterSamples(IIR_Input, IIR_OutSE, 0, IIR_LastSample, 0);
 
           // SUSSsmoothingTime secs integration into EDF output file
           for (int k1 = 0; k1 <= IIR_LastSample; k1++)
           {
+            // Accumulate the output sample value
             SUactualSample += IIR_OutDU[k1] * IIR_OutSE[k1];
             SSactualSample += Math.Pow(IIR_OutSE[k1], 2) * IIR_Delta;
+
+            // Update the accumulated samples total time
             integratedTime += IIR_Delta;
             integrateCount++;
 
-            // todo: Marco: Check what is happening here ===>
-                     
+            // Check if we have acculmulated enough samples to write an output sample
             if (integratedTime >= AppConf.SmoothTime)
             {
-              double normFactor = integrateCount * IIR_Delta;
-              SUactualSample = SUactualSample / normFactor;
-              SSactualSample = SSactualSample / normFactor;
+              // Watch it!
+              // Dividing by the integration interval implies that average powers are computed, not integrated energies.
+              double integrationInterval = integrateCount * IIR_Delta;
+              SUactualSample = SUactualSample / integrationInterval;
+              SSactualSample = SSactualSample / integrationInterval;
               integrateCount = 0;
               integratedTime -= AppConf.SmoothTime;
+              // Set flag to write the output samples
               oneOutputSampleObtained = true;
             }
-
-            // todo: Marco: until here.... <===
 
             if (oneOutputSampleObtained)
             {
               /*
                LogFloat is used because:
-                  IIR_Gain_du and IIR_Gain_s and INT_Gain (the derived
-                  INT_Gain_SU and INT_Gain_SS) are optimized for the years 1995-1997
-                  slow-wave and analysis of sigma 12-bit ADC signals (from
-                  EEG devices like tape recorders within integer range (OutReal) account.
-                  This range was therefore (+/-) 1 .. 32767. 16-bit signals (EDF) and other model
-                  and sampling frequencies can give up to 16 * 16 * 100 times greater powers. 
-                  8-bit signals (eg BrainSpy) and other model and sampling frequencies can give
-                  16 * 16 * 100 times smaller powers. So the range is OutReal, in general,
-                  about 1E-4 til 10000*1E+5. This range can be projected in EDF integers with an accuracy of 0.1%
-                  using a log-conversion (see Kemp et al, Journal of Sleep Research 1998 and
-                  also www.medfac.leidenuniv.nl/neurology/KNF/kemp/edffloat.htm). This has the advantage that
-                  analysis results can be viewed with a simple EDF viewer
+                  IIR_Gain_du and IIR_Gain_s and INT_Gain (the derived INT_Gain_SU and INT_Gain_SS) are optimized for the years 1995-1997
+                  slow-wave and analysis of sigma 12-bit ADC signals (from EEG devices like tape recorders within integer range (OutReal) account.
+                  This range was therefore (+/-) 1 .. 32767. 16-bit signals (EDF) and other model and sampling frequencies can give up to 16 * 16 * 100 times greater powers. 
+                  8-bit signals (eg BrainSpy) and other model and sampling frequencies can give 16 * 16 * 100 times smaller powers. So the range is OutReal, in general,
+                  about 1E-4 til 10000*1E+5. This range can be projected in EDF integers with an accuracy of 0.1% using a log-conversion 
+                  (see Kemp et al, Journal of Sleep Research 1998 and also www.medfac.leidenuniv.nl/neurology/KNF/kemp/edffloat.htm). 
+                  This has the advantage that analysis results can be viewed with a simple EDF viewer.
                */
-              OutputEDFFile.DataBuffer[OutputBufferOffsets[1] + outRecSample] = MathEx.LogFloat(SUactualSample, AppConf.LogFloatY0, AppConf.LogFloatA);
-              OutputEDFFile.DataBuffer[OutputBufferOffsets[2] + outRecSample] = MathEx.LogFloat(SSactualSample, AppConf.LogFloatY0, AppConf.LogFloatA);
+
+              // Add the samples to the output databuffer and update the index
+              OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.SU] + outRecSample] = MathEx.LogFloat(SUactualSample, AppConf.LogFloatY0, AppConf.LogFloatA);
+              OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.SS] + outRecSample] = MathEx.LogFloat(SSactualSample, AppConf.LogFloatY0, AppConf.LogFloatA);
               outRecSample++;
+
+              // If output buffer is full, write it to disk
               if (outRecSample == MCsignalsBlockSamples)
               {
                 OutputEDFFile.WriteDataBlock(currentOutputRecord);
@@ -1177,9 +1217,11 @@ namespace NeuroLoopGain
                 currentOutputRecord++;
                 if ((currentOutputRecord < OutputEDFFile.FileInfo.NrDataRecords) && AppConf.CopyInputSignal)
                 {
-                    OutputEDFFile.ReadDataBlock(currentOutputRecord);
+                  OutputEDFFile.ReadDataBlock(currentOutputRecord);
                 }
               }
+
+              // Initialise the output smaple accumulators and reset output sample available flag
               SUactualSample = 0;
               SSactualSample = 0;
               oneOutputSampleObtained = false;
@@ -1188,17 +1230,18 @@ namespace NeuroLoopGain
 
         }// processing input block by block
 
-        // Complete and store last output block with zeros
+        // Complete last output block with zeros and write it to the ouput file
         if (outRecSample != 0)
         {
           for (int k = outRecSample; k < MCsignalsBlockSamples; k++)
           {
-            OutputEDFFile.DataBuffer[OutputBufferOffsets[1] + k] = 0;
-            OutputEDFFile.DataBuffer[OutputBufferOffsets[2] + k] = 0;
+            OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.SU] + k] = 0;
+            OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.SS] + k] = 0;
           }
           OutputEDFFile.WriteDataBlock(currentOutputRecord);
         }
 
+        // Commit EDF file changes (changed number of datablocks)
         OutputEDFFile.CommitChanges();
       }
 
@@ -1247,9 +1290,9 @@ namespace NeuroLoopGain
           _suBack = new double[MCEventDurationSamples + 1];
           _suBack.Fill(0);
           _ssForw = new double[MCEventDurationSamples + 1];
-          _ssForw.Fill(PiBExpInt);
+          _ssForw.Fill(PiBxx);
           _ssBack = new double[MCEventDurationSamples + 1];
-          _ssBack.Fill(PiBExpInt);
+          _ssBack.Fill(PiBxx);
 
           MCsignalsFileSamples = MCsignalsBlockSamples * OutputEDFFile.FileInfo.NrDataRecords;
 
@@ -1262,8 +1305,8 @@ namespace NeuroLoopGain
 
             for (int k1 = 0; k1 < MCsignalsBlockSamples; k1++)
             {
-              su = MathEx.ExpInteger(OutputEDFFile.DataBuffer[OutputBufferOffsets[1] + k1], AppConf.LogFloatY0, AppConf.LogFloatA);
-              ss = MathEx.ExpInteger(OutputEDFFile.DataBuffer[OutputBufferOffsets[2] + k1], AppConf.LogFloatY0, AppConf.LogFloatA);
+              su = MathEx.ExpInteger(OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.SU] + k1], AppConf.LogFloatY0, AppConf.LogFloatA);
+              ss = MathEx.ExpInteger(OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.SS] + k1], AppConf.LogFloatY0, AppConf.LogFloatA);
               switch (option)
               {
                 case SmoothOption.GetArtifactsResetAll:
@@ -1291,8 +1334,8 @@ namespace NeuroLoopGain
           smoothReset = true;
           _suForw.Fill(0);
           _suBack.Fill(0);
-          _ssForw.Fill(PiBExpInt);
-          _ssBack.Fill(PiBExpInt);
+          _ssForw.Fill(PiBxx);
+          _ssBack.Fill(PiBxx);
           for (int k = OutputEDFFile.FileInfo.NrDataRecords - 1; k >= 0; k--)
           {
             OutputEDFFile.ReadDataBlock(k);
@@ -1300,23 +1343,28 @@ namespace NeuroLoopGain
             for (int k1 = MCsignalsBlockSamples - 1; k1 >= 0; k1--)
             {
               fileSampleNr--;
-              su = MathEx.ExpInteger(OutputEDFFile.DataBuffer[OutputBufferOffsets[1] + k1], AppConf.LogFloatY0, AppConf.LogFloatA);
-              ss = MathEx.ExpInteger(OutputEDFFile.DataBuffer[OutputBufferOffsets[2] + k1], AppConf.LogFloatY0, AppConf.LogFloatA);
+              su = MathEx.ExpInteger(OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.SU] + k1], AppConf.LogFloatY0, AppConf.LogFloatA);
+              ss = MathEx.ExpInteger(OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.SS] + k1], AppConf.LogFloatY0, AppConf.LogFloatA);
               switch (option)
               {
                 case SmoothOption.GetArtifactsResetAll:
                   // UpdateArtifacts uses SS,SU,SmoothReset,XpiBArt,ArtSpreadSamples
                   MCSmooth_UpdateArtifacts(smoothReset, ss, su);
-                  OutputEDFFile.DataBuffer[OutputBufferOffsets[9] + k1] += ArtHF;
-                  OutputEDFFile.DataBuffer[OutputBufferOffsets[10] + k1] += ArtLF;
-                  OutputEDFFile.DataBuffer[OutputBufferOffsets[11] + k1] += ArtZero;
+
+                  // todo: Bob controleren nauwkeurigheid
+
+                  //OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.HFart] + k1] += ArtHF;
+                  OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.HFart] + k1] += (short)MathEx.RoundNearest(ArtHF / ArtifactPhysicalDimensionResolution);
+
+
+                  //OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.LFart] + k1] += ArtLF;
+                  OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.LFart] + k1] += (short)MathEx.RoundNearest(ArtLF / ArtifactPhysicalDimensionResolution);
+
+                  //OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.MissingSignal] + k1] += ArtZero;
+                  OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.MissingSignal] + k1] += (short)MathEx.RoundNearest(ArtZero / ArtifactPhysicalDimensionResolution);
+
                   break;
                 case SmoothOption.DetectEventsResetJumps:
-                  //TODO: temp for debugging
-                  /*if ((k == 0) && (k1 == 0))
-                  {
-                      int llegamos = 1;
-                  }*/
                   MCSmooth_DetectEvents_ResetJumps(OutputEDFFile.DataBuffer, k1, false);
                   break;
                 case SmoothOption.Smooth:
@@ -1360,7 +1408,7 @@ namespace NeuroLoopGain
 
         for (int k1 = 0; k1 < inputBlockSamples; k1++)
         {
-          OutputEDFFile.DataBuffer[OutputBufferOffsets[0] + outBlockSample] = InputEDFFile.DataBuffer[InputBufferOffsets[InputSignalSelected] + k1];
+          OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.Input] + outBlockSample] = InputEDFFile.DataBuffer[InputBufferOffsets[InputSignalSelected] + k1];
 
           // Check if output block filled
           if (outBlockSample == (OutputEDFFile.SignalInfo[0].NrSamples - 1))
@@ -1493,14 +1541,14 @@ namespace NeuroLoopGain
     /// The number of output signals.
     /// </value>
     public int NumOutputSignals { get; set; }
-      
+
     /// <summary>
-    /// Gets or sets the output signal buffer offsets.
+    /// Gets or sets the output signal buffer offset.
     /// </summary>
     /// <value>
-    /// The output signal buffer offsets.
+    /// The output signal buffer offset.
     /// </value>
-    public int[] OutputBufferOffsets { get; set; }
+    public int[] OutputBufferOffset { get; set; }
 
     /// <summary>
     /// Gets or sets the output EDF file.
