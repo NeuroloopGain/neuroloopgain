@@ -1,0 +1,134 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProductVersion>8.0.30703</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{25104B9D-3D18-4BF0-B901-FCBECFD41BCB}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>NeuroLoopGainLibrary</RootNamespace>
+    <AssemblyName>NeuroLoopGainLibrary</AssemblyName>
+    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="NLog">
+      <HintPath>..\NLog\NLog.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Arrays\ArrayExtensions.cs" />
+    <Compile Include="Commandline\BaseCommandlineParser.cs" />
+    <Compile Include="Commandline\CommandlineOption.cs" />
+    <Compile Include="Commandline\CommandlineOptionFlags.cs" />
+    <Compile Include="Commandline\CommandlineParser.cs" />
+    <Compile Include="Commandline\CommandlineParserGetOpt.cs" />
+    <Compile Include="Commandline\CommandlineParserState.cs" />
+    <Compile Include="DateTimeTypes\HPDateTime.cs" />
+    <Compile Include="Edf\AnnotationType.cs" />
+    <Compile Include="Edf\BaseEdfFileBase.cs" />
+    <Compile Include="Edf\DataFile.cs" />
+    <Compile Include="Edf\DataFileConsts.cs" />
+    <Compile Include="Edf\DataFileContinuousException.cs" />
+    <Compile Include="Edf\DataFileDataExistsException.cs" />
+    <Compile Include="Edf\DataFileException.cs" />
+    <Compile Include="Edf\DataFileExistsException.cs" />
+    <Compile Include="Edf\DataFileFieldValueException.cs" />
+    <Compile Include="Edf\DataFileHeaderInvalidException.cs" />
+    <Compile Include="Edf\DataFileInvalidBlock0OnsetException.cs" />
+    <Compile Include="Edf\DataFileIsCreatingException.cs" />
+    <Compile Include="Edf\DataFileIsOpenException.cs" />
+    <Compile Include="Edf\DataFileNotContinuousException.cs" />
+    <Compile Include="Edf\DataFileReadDataException.cs" />
+    <Compile Include="Edf\DataFileReadOnlyException.cs" />
+    <Compile Include="Edf\DataFileWriteDataException.cs" />
+    <Compile Include="Edf\EdfConstants.cs" />
+    <Compile Include="Edf\EdfDataBlockSizeCalculator.cs" />
+    <Compile Include="Edf\EdfException.cs" />
+    <Compile Include="Edf\EdfFile.cs" />
+    <Compile Include="Edf\EdfFileBase.cs" />
+    <Compile Include="Edf\EdfFileHeaderInfoBase.cs" />
+    <Compile Include="Edf\EdfFileInfo.cs" />
+    <Compile Include="Edf\EdfFileInfoBase.cs" />
+    <Compile Include="Edf\EdfFileInfoRaw.cs" />
+    <Compile Include="Edf\EdfFileInfoStringBase.cs" />
+    <Compile Include="Edf\EdfHeaderErrorType.cs" />
+    <Compile Include="Edf\EdfPatientInfoString.cs" />
+    <Compile Include="Edf\EdfPlusAnnotation.cs" />
+    <Compile Include="Edf\EdfPlusAnnotationDataBlock.cs" />
+    <Compile Include="Edf\EdfPlusAnnotationList.cs" />
+    <Compile Include="Edf\EdFplusAnnotationListBase.cs" />
+    <Compile Include="Edf\EdfPlusFile.cs" />
+    <Compile Include="Edf\EdfPlusFileBase.cs" />
+    <Compile Include="Edf\EdfPlusFileInfo.cs" />
+    <Compile Include="Edf\EdfPlusSignalInfo.cs" />
+    <Compile Include="Edf\EdfPlusSignalType.cs" />
+    <Compile Include="Edf\EdfPlusSignalTypeHelper.cs" />
+    <Compile Include="Edf\EdfPlusTALException.cs" />
+    <Compile Include="Edf\EdfPlusTools.cs" />
+    <Compile Include="Edf\EdfRecordingInfoString.cs" />
+    <Compile Include="Edf\EdfSignalInfo.cs" />
+    <Compile Include="Edf\EdfSignalInfoBase.cs" />
+    <Compile Include="Edf\EdfSignalInfoRaw.cs" />
+    <Compile Include="Edf\PrereadTALs.cs" />
+    <Compile Include="Edf\TalConsts.cs" />
+    <Compile Include="Edf\TalError.cs" />
+    <Compile Include="Errorhandling\AssertionException.cs" />
+    <Compile Include="Errorhandling\ErrorMessage.cs" />
+    <Compile Include="Errorhandling\RangeException.cs" />
+    <Compile Include="Extensions\EnumExtension.cs" />
+    <Compile Include="Filters\DUEFilter.cs" />
+    <Compile Include="Filters\FilterBase.cs" />
+    <Compile Include="Filters\FilterDirectionType.cs" />
+    <Compile Include="Filters\FilterSetting.cs" />
+    <Compile Include="Filters\FilterStateBase.cs" />
+    <Compile Include="Filters\FilterTools.cs" />
+    <Compile Include="Filters\FilterType.cs" />
+    <Compile Include="Filters\IIRFilterBase.cs" />
+    <Compile Include="Filters\IIRFilterState.cs" />
+    <Compile Include="Filters\SEFilter.cs" />
+    <Compile Include="Filters\SettingInfo.cs" />
+    <Compile Include="General\ApplicationHelper.cs" />
+    <Compile Include="General\ConvertException.cs" />
+    <Compile Include="IO\MinimalReadBufferSizeFileStream.cs" />
+    <Compile Include="Logging\ErrorLogger.cs" />
+    <Compile Include="Mathematics\MathEx.cs" />
+    <Compile Include="Mathematics\Range.cs" />
+    <Compile Include="Mathematics\RoundingMode.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Text\TextUtils.cs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>
