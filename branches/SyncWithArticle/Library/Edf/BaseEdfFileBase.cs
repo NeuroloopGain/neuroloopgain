@@ -53,6 +53,13 @@ namespace NeuroLoopGainLibrary.Edf
 
     #region Private Methods
 
+    ~BaseEdfFileBase()
+    {
+      Active = false;
+      _fileInfo = null;
+      _fileHandle = null;
+    }
+
     private long GetFileSize()
     {
       lock (FileAccess)
@@ -150,6 +157,14 @@ namespace NeuroLoopGainLibrary.Edf
 
     #region protected methods
 
+    protected BaseEdfFileBase()
+    {
+      CheckVersionOnOpen = false;
+      _error = new ErrorMessage();
+      _fileAccess = new object();
+      _strictChecking = true;
+    }
+
     protected virtual void CalculateDataBlockSize()
     {
       int sum = SignalInfo.Sum(aSignalInfo => aSignalInfo.NrSamples);
@@ -158,32 +173,24 @@ namespace NeuroLoopGainLibrary.Edf
 
     protected void CalculateNrDataRecords()
     {
-      if (!ValidFormat)
+      if (!ValidFormat) 
         return;
+
       CalculateDataBlockSize();
       FileInfo.NrDataRecords = (int)(FileSize - FileInfo.HeaderBytes) / DataBlockSize / sizeof(short);
     }
 
     protected bool CheckHeader()
     {
-      if (Active || Creating)
-        return FileInfo.DataValid;
-      return false;
+      return (Active || Creating) && FileInfo.DataValid;
     }
 
     protected bool CheckSignals()
     {
-      bool result = false;
-      if (Active || Creating)
-      {
-        foreach (var aSignalInfo in SignalInfo)
-        {
-          result = aSignalInfo.DataValid;
-          if (!result)
-            break;
-        }
-      }
-      return result;
+      if (!Active && !Creating) 
+        return false;
+
+      return SignalInfo.All(aSignalInfo => aSignalInfo.DataValid);
     }
 
     protected short[] CreateDataBuffer()
@@ -199,8 +206,10 @@ namespace NeuroLoopGainLibrary.Edf
     {
       if (!Active && !Creating)
         return;
+
       if (Modified && !OpenReadOnly)
         CommitChanges();
+
       if (_ownsStream)
       {
         _fileHandle.Close();
@@ -208,6 +217,7 @@ namespace NeuroLoopGainLibrary.Edf
       }
       else
         _fileHandle = null;
+
       _active = false;
     }
 
@@ -216,15 +226,20 @@ namespace NeuroLoopGainLibrary.Edf
       Debug.Assert(!OpenReadOnly, EdfConstants.FileIsReadOnly);
       if (HeaderModified())
         WriteHeaderInfo();
+
       if (SignalModified())
       {
         WriteSignalInfo();
         DoDataBufferSizeChanged();
       }
-      if (!Creating || !ValidFormat)
+
+      if (!Creating || !ValidFormat) 
         return;
+
       Creating = false;
       _active = true;
+      // When creating ValidFormat returns true/false, but doesn't set the _validFormat backing field; so we have to set it here.
+      // Future calls will read the backing field instead of testing the file and signal headers over and over.
       _validFormat = true;
       CalculateDataBlockSize();
       DoDataBufferSizeChanged();
@@ -260,8 +275,9 @@ namespace NeuroLoopGainLibrary.Edf
     protected virtual void DoDataBufferSizeChanged()
     {
       // Recalculate signal databuffer offsets and datablocksize
-      if (!ValidFormat)
+      if (!ValidFormat) 
         return;
+
       int index = 0;
       for (int i = 0; i < FileInfo.NrSignals; i++)
       {
@@ -371,7 +387,7 @@ namespace NeuroLoopGainLibrary.Edf
 
     protected virtual void DoOpenFile()
     {
-      if (Active)
+      if (Active) 
         return;
       DoOpenStream();
       if (!Creating)
@@ -422,10 +438,13 @@ namespace NeuroLoopGainLibrary.Edf
     protected virtual void DoOpenStream()
     {
       _ownsStream = true;
+
       if (OnOpenStream != null)
         OnOpenStream(this, ref _fileHandle, ref _ownsStream);
-      if (_fileHandle != null)
+
+      if (_fileHandle != null) 
         return;
+
       if (UseMemoryStream)
       {
         _fileHandle = new MemoryStream();
@@ -477,6 +496,7 @@ namespace NeuroLoopGainLibrary.Edf
     {
       if (!Active || OpenReadOnly || (blockNr < 0) || (blockNr > FileInfo.NrDataRecords) || (buffer.Length != DataBlockSize))
         return false;
+
       try
       {
         // Calculate the file DataBlockOffset of the data to be written
@@ -505,21 +525,6 @@ namespace NeuroLoopGainLibrary.Edf
       {
         return false;
       }
-    }
-
-    protected BaseEdfFileBase()
-    {
-      CheckVersionOnOpen = false;
-      _error = new ErrorMessage();
-      _fileAccess = new object();
-      _strictChecking = true;
-    }
-
-    ~BaseEdfFileBase()
-    {
-      Active = false;
-      _fileInfo = null;
-      _fileHandle = null;
     }
 
     protected bool GetModified()
@@ -588,52 +593,54 @@ namespace NeuroLoopGainLibrary.Edf
     {
       Debug.Assert(FileHandle != null, DataFileConsts.DataFileIsNotOpen);
       SignalInfo.Clear();
+
       int dummy;
-      if (FileInfo.FieldValid[(int) EdfFileInfoBase.Field.NrSignals] ||
-          int.TryParse(FileInfo.EdfFileInfoRaw.NrSignals.Trim(), out dummy))
+
+      if (!FileInfo.FieldValid[(int)EdfFileInfoBase.Field.NrSignals] &&
+          !int.TryParse(FileInfo.EdfFileInfoRaw.NrSignals.Trim(), out dummy))
+        return;
+
+      List<EdfSignalInfoRaw> tmpSignalInfo = new List<EdfSignalInfoRaw>();
+      for (int i = 0; i < FileInfo.NrSignals; i++)
       {
-        List<EdfSignalInfoRaw> tmpSignalInfo = new List<EdfSignalInfoRaw>();
+        EdfSignalInfoBase newSignalDef = CreateSignalInfo();
+        newSignalDef.StrictChecking = StrictChecking;
+        SignalInfo.Add(newSignalDef);
+        tmpSignalInfo.Add(new EdfSignalInfoRaw());
+      }
+      if (FileSize >= (FileInfo.NrSignals + 1) * 256)
+      {
+        lock (FileAccess)
+        {
+          FileHandle.Seek(256, SeekOrigin.Begin);
+          for (int i = 0; i < FileInfo.NrSignals; i++)
+            tmpSignalInfo[i].SignalLabel = ReadStringField(16);
+          for (int i = 0; i < FileInfo.NrSignals; i++)
+            tmpSignalInfo[i].TransducerType = ReadStringField(80);
+          for (int i = 0; i < FileInfo.NrSignals; i++)
+            tmpSignalInfo[i].PhysiDim = ReadStringField(8);
+          for (int i = 0; i < FileInfo.NrSignals; i++)
+            tmpSignalInfo[i].PhysiMin = ReadStringField(8);
+          for (int i = 0; i < FileInfo.NrSignals; i++)
+            tmpSignalInfo[i].PhysiMax = ReadStringField(8);
+          for (int i = 0; i < FileInfo.NrSignals; i++)
+            tmpSignalInfo[i].DigiMin = ReadStringField(8);
+          for (int i = 0; i < FileInfo.NrSignals; i++)
+            tmpSignalInfo[i].DigiMax = ReadStringField(8);
+          for (int i = 0; i < FileInfo.NrSignals; i++)
+            tmpSignalInfo[i].PreFilter = ReadStringField(80);
+          for (int i = 0; i < FileInfo.NrSignals; i++)
+            tmpSignalInfo[i].NrSamples = ReadStringField(8);
+          for (int i = 0; i < FileInfo.NrSignals; i++)
+            tmpSignalInfo[i].Reserved = ReadStringField(32);
+        }
         for (int i = 0; i < FileInfo.NrSignals; i++)
         {
-          EdfSignalInfoBase newSignalDef = CreateSignalInfo();
-          newSignalDef.StrictChecking = StrictChecking;
-          SignalInfo.Add(newSignalDef);
-          tmpSignalInfo.Add(new EdfSignalInfoRaw());
+          SignalInfo[i].SignalInfoRecord = tmpSignalInfo[i];
+          SignalInfo[i].DataExists = FileInfo.DataExists;
         }
-        if (FileSize >= (FileInfo.NrSignals + 1)*256)
-        {
-          lock (FileAccess)
-          {
-            FileHandle.Seek(256, SeekOrigin.Begin);
-            for (int i = 0; i < FileInfo.NrSignals; i++)
-              tmpSignalInfo[i].SignalLabel = ReadStringField(16);
-            for (int i = 0; i < FileInfo.NrSignals; i++)
-              tmpSignalInfo[i].TransducerType = ReadStringField(80);
-            for (int i = 0; i < FileInfo.NrSignals; i++)
-              tmpSignalInfo[i].PhysiDim = ReadStringField(8);
-            for (int i = 0; i < FileInfo.NrSignals; i++)
-              tmpSignalInfo[i].PhysiMin = ReadStringField(8);
-            for (int i = 0; i < FileInfo.NrSignals; i++)
-              tmpSignalInfo[i].PhysiMax = ReadStringField(8);
-            for (int i = 0; i < FileInfo.NrSignals; i++)
-              tmpSignalInfo[i].DigiMin = ReadStringField(8);
-            for (int i = 0; i < FileInfo.NrSignals; i++)
-              tmpSignalInfo[i].DigiMax = ReadStringField(8);
-            for (int i = 0; i < FileInfo.NrSignals; i++)
-              tmpSignalInfo[i].PreFilter = ReadStringField(80);
-            for (int i = 0; i < FileInfo.NrSignals; i++)
-              tmpSignalInfo[i].NrSamples = ReadStringField(8);
-            for (int i = 0; i < FileInfo.NrSignals; i++)
-              tmpSignalInfo[i].Reserved = ReadStringField(32);
-          }
-          for (int i = 0; i < FileInfo.NrSignals; i++)
-          {
-            SignalInfo[i].SignalInfoRecord = tmpSignalInfo[i];
-            SignalInfo[i].DataExists = FileInfo.DataExists;
-          }
-        }
-        CalculateDataBlockSize();
       }
+      CalculateDataBlockSize();
     }
 
     protected string ReadStringField(int length)
