@@ -16,26 +16,82 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 
+using System;
+
 namespace NeuroLoopGainLibrary.Filters
 {
+  /// <summary>
+  /// Class to store the current state of an IIR filter
+  /// </summary>
   public class IIRFilterState : FilterStateBase
   {
+    #region private fields
+
+    private readonly double[] _filterStateP;
+    private readonly double[] _filterStateZ;
+
+    #endregion private fields
+
     #region Constructors
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IIRFilterState"/> class.
+    /// </summary>
+    /// <param name="filterStateP">The current Poles filter state.</param>
+    /// <param name="filterStateZ">The current Zeros filter state.</param>
     public IIRFilterState(double[] filterStateP, double[] filterStateZ)
     {
-      FilterStateP = filterStateP;
-      FilterStateZ = filterStateZ;
+      if (filterStateP != null)
+      {
+        _filterStateP = new double[filterStateP.Length];
+        Array.Copy(filterStateP, _filterStateP, filterStateP.Length);
+      }
+
+      if (filterStateZ != null)
+      {
+        _filterStateZ = new double[filterStateZ.Length];
+        Array.Copy(filterStateZ, _filterStateZ, filterStateZ.Length);
+      }
     }
 
     #endregion Constructors
 
-    #region Public Properties
+    #region public properties
 
-    public double[] FilterStateP { get; private set; }
+    /// <summary>
+    /// Gets the backup of the Poles filter state.
+    /// </summary>
+    public double[] FilterStateP
+    {
+      get
+      {
+        if (_filterStateP == null)
+          return null;
 
-    public double[] FilterStateZ { get; private set; }
+        double[] result = new double[_filterStateP.Length];
+        Array.Copy(_filterStateP, result, _filterStateP.Length);
 
-    #endregion Public Properties
+        return result;
+      }
+    }
+
+    /// <summary>
+    /// Gets the backup of the Zeros filter state.
+    /// </summary>
+    public double[] FilterStateZ
+    {
+      get
+      {
+        if (_filterStateZ == null)
+          return null;
+
+        double[] result = new double[_filterStateZ.Length];
+        Array.Copy(_filterStateZ, result, _filterStateZ.Length);
+
+        return result;
+      }
+    }
+
+    #endregion public properties
   }
 }

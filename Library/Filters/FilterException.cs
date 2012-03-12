@@ -16,21 +16,22 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 
+using System;
+
 namespace NeuroLoopGainLibrary.Filters
 {
-  /// <summary>
-  /// Defines the direction the filter processes data
-  /// </summary>
-  public enum FilterDirectionType
+  public class FilterException : ApplicationException
   {
-    /// <summary>
-    /// Filter data from lower array index to higher array index
-    /// </summary>
-    Forward,
+    public FilterException()
+    {
+    }
 
-    /// <summary>
-    /// Filter data from higher array index to lower array index
-    /// </summary>
-    Backward
+    public FilterException(string message) : base(message)
+    {
+    }
+
+    public FilterException(string message, Exception innerException) : base(message, innerException)
+    {
+    }
   }
 }

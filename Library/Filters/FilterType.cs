@@ -18,13 +18,16 @@
 
 namespace NeuroLoopGainLibrary.Filters
 {
+  /// <summary>
+  /// Enumeration with available filter types.
+  /// </summary>
   public enum FilterType
   {
     LP,
     HP,
     NOTCH,
     RECT,
-    SingleSideRECT,
+    SingleSideRect,
     BP,
     DUE,
     SE,

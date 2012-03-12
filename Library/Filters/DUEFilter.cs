@@ -20,45 +20,56 @@ using System;
 
 namespace NeuroLoopGainLibrary.Filters
 {
+  /// <summary>
+  /// Class implementing an inverse low-pass & integrator filter.
+  /// </summary>
   public class DUEFilter : IIRFilterBase
   {
-    #region Protected Methods
+    #region protected methods
 
     protected override void CalculateIIRCoeff()
     {
       base.CalculateIIRCoeff();
-      FZeros = new double[2];           // 1 Zero
-      FFilterStateZ = new double[2];
-      FPoles = new double[1];           // 0 Poles, Idx 0 not used
-      FFilterStateP = new double[2];    // NrPoles+1 !!!!!
+
+      Zeros = new double[2];
+      FilterStateZ = new double[2];
+      Poles = new double[1];
+      FilterStateP = new double[2];
+
       // Settings: 1=SampleFreq, 2=Gain, 3=FilterFreq
-      double ts = 1.0 / Setting[1].Value;
+      double ts = 1.0 / SampleFrequency;
       double fprewarp = Math.Tan(Math.PI * Setting[3].Value * ts) / (Math.PI * ts);
       double r = 1.0 / (2.0 * Math.PI * fprewarp);
       double s = ts / 2.0;
-      FZeros[0] = Gain * (s + r);
-      FZeros[1] = Gain * (s - r);
-      FPoles[0] = 1.0;
+
+      Zeros[0] = Gain * (s + r);
+      Zeros[1] = Gain * (s - r);
+      Poles[0] = 1.0;
     }
 
     protected override int DoCheckSettings()
     {
       int result = base.DoCheckSettings();
+
       if (result == 0)
-      {
-        if ((Setting[3].Value <= 0) || (Setting[3].Value > Setting[1].Value / 2))
+        if ((Setting[3].Value <= 0) || (Setting[3].Value > SampleFrequency / 2))
           result = 3;
-      }
+
       return result;
     }
 
-    #endregion Protected Methods
+    #endregion protected methods
 
     #region Constructors
 
     public DUEFilter()
+      : base(3)
     {
-      Setting.SetCount(3);
+      InitialiseSettings();
+    }
+
+    private void InitialiseSettings()
+    {
       Setting[0].Info = "Inverse low-pass & integrator";
       Setting[3].Info = "-3dB frequency";
     }
