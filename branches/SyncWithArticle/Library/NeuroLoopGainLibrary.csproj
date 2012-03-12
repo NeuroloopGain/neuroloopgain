@@ -100,11 +100,13 @@
     <Compile Include="Edf\TalError.cs" />
     <Compile Include="Errorhandling\AssertionException.cs" />
     <Compile Include="Errorhandling\ErrorMessage.cs" />
+    <Compile Include="Errorhandling\ListException.cs" />
     <Compile Include="Errorhandling\RangeException.cs" />
     <Compile Include="Extensions\EnumExtension.cs" />
     <Compile Include="Filters\DUEFilter.cs" />
     <Compile Include="Filters\FilterBase.cs" />
     <Compile Include="Filters\FilterDirectionType.cs" />
+    <Compile Include="Filters\FilterException.cs" />
     <Compile Include="Filters\FilterSetting.cs" />
     <Compile Include="Filters\FilterStateBase.cs" />
     <Compile Include="Filters\FilterTools.cs" />
@@ -116,6 +118,8 @@
     <Compile Include="General\ApplicationHelper.cs" />
     <Compile Include="General\ConvertException.cs" />
     <Compile Include="IO\MinimalReadBufferSizeFileStream.cs" />
+    <Compile Include="Lists\IndexerBase.cs" />
+    <Compile Include="Lists\IndexerGetterSetter.cs" />
     <Compile Include="Logging\ErrorLogger.cs" />
     <Compile Include="Mathematics\MathEx.cs" />
     <Compile Include="Mathematics\Range.cs" />

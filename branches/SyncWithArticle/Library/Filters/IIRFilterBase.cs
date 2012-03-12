@@ -21,64 +21,39 @@ using NeuroLoopGainLibrary.Errorhandling;
 
 namespace NeuroLoopGainLibrary.Filters
 {
+  /// <summary>
+  /// This class is the ancestor of all IIR filters; IIR filters use Poles and Zeros to implement the filter characteristics.
+  /// </summary>
   public class IIRFilterBase : FilterBase
   {
-    #region Protected Fields
+    #region protected fields
 
-    protected double[] FFilterStateP;
-    protected double[] FFilterStateZ;
-    protected double[] FPoles;
-    protected double[] FZeros;
+    protected double[] FilterStateP;
+    protected double[] FilterStateZ;
+    protected double[] Poles;
+    protected double[] Zeros;
 
-    #endregion Protected Fields
+    #endregion protected fields
 
-    #region Protected Methods
+    #region protected methods
 
+    /// <summary>
+    /// Check the filter setting and calculates the IIR coeffients used to filter data.
+    /// </summary>
     protected virtual void CalculateIIRCoeff()
     {
       int i = CheckSettings();
       if (i != 0)
-        throw new RangeException(string.Format("{0}: Filter setting {1} out of range", GetType().Name,
-                                               Setting[i].Info));
+        throw new RangeException(string.Format("{0}: Filter setting {1} out of range", GetType().Name, Setting[i].Info));
       Setting.NewSettings = false;
     }
 
     protected override FilterStateBase DoBackupFilterState()
     {
-      return new IIRFilterState(FFilterStateP, FFilterStateZ);
+      return new IIRFilterState(FilterStateP, FilterStateZ);
     }
 
-    protected override void DoRestoreFilterState(FilterStateBase filterState)
-    {
-      FFilterStateP = ((IIRFilterState)filterState).FilterStateP;
-      FFilterStateZ = ((IIRFilterState)filterState).FilterStateZ;
-    }
-
-    #endregion Protected Methods
-
-    #region Constructors
-
-    public IIRFilterBase()
-    {
-      Anticipate = true;
-      Setting[0].Info = "Abstract Custom IIRFilter";
-      Setting[1].Info = "SampleFrequency";
-      Setting[2].Info = "FilterGain";
-    }
-
-    #endregion Constructors
-
-    #region Public Properties
-
-    public bool Anticipate { get; set; }
-
-    public double BackPolate { get; set; }
-
-    #endregion Public Properties
-
-    #region Public Methods
-
-    public override void FilterSamples(double[] samplesIn, double[] samplesOut, int idxStart, int idxEnd, int outIdxStart = -1)
+    protected override void DoFilterSamples(double[] samplesIn, double[] samplesOut, int idxStart, int idxEnd, int outIdxStart = -1)
     {
       int idx, idxLast;
       double s = 0;
@@ -87,7 +62,7 @@ namespace NeuroLoopGainLibrary.Filters
       // Filter from IdxStart to IdxEnd avoiding endless loop
       int step = idxEnd != idxStart ? Math.Sign(((long)idxEnd - idxStart)) : 1;
       int outIdx = outIdxStart < 0 ? idxStart : outIdxStart;
-      if (Direction == FilterDirectionType.ForwardOnly)
+      if (Direction == FilterDirectionType.Forward)
       {
         idx = idxStart;
         idxLast = idxEnd + 1;
@@ -100,81 +75,123 @@ namespace NeuroLoopGainLibrary.Filters
       }
       while (idx != idxLast)
       {
-        FFilterStateZ[0] = samplesIn[idx];
+        FilterStateZ[0] = samplesIn[idx];
         if (UseFirstSampleToReset)
         {
-          Reset(FFilterStateZ[0]);
+          DoReset(FilterStateZ[0]);
           UseFirstSampleToReset = false;
         }
         // Compute new output sample
         double r = 0;
         // Add past output-values
         int i;
-        for (i = 1; i <= FPoles.GetUpperBound(0); i++)
-          r = r + FPoles[i] * FFilterStateP[i];
+        for (i = 1; i <= Poles.GetUpperBound(0); i++)
+          r = r + Poles[i] * FilterStateP[i];
         // Not anticipate = do not include current input sample in output value
         if (!Anticipate)
           s = r;
         // Add past input-values
-        for (i = 0; i <= FZeros.GetUpperBound(0); i++)
-          r = r + FZeros[i] * FFilterStateZ[i];
+        for (i = 0; i <= Zeros.GetUpperBound(0); i++)
+          r = r + Zeros[i] * FilterStateZ[i];
         // Anticipate = include current input sample in output value
         if (Anticipate)
           s = r;
         // Do backpolation (FilterStateP[1] = Last out-sample)
-        s = BackPolate * FFilterStateP[1] + (1.0 - BackPolate) * s;
+        s = BackPolate * FilterStateP[1] + (1.0 - BackPolate) * s;
         // Scale result 
-        // TODO: Check if removing extra checks was ok
         samplesOut[outIdx] = s;
-        //TDynDoubleArray(SamplesOut)[OutIdx]:=Max(-MaxDouble,Min(s,MaxDouble));
         // Update filter state
-        for (i = FPoles.GetUpperBound(0); i >= 2; i--)
-          FFilterStateP[i] = FFilterStateP[i - 1];
-        FFilterStateP[1] = r;
-        for (i = FZeros.GetUpperBound(0); i >= 1; i--)
-          FFilterStateZ[i] = FFilterStateZ[i - 1];
+        for (i = Poles.GetUpperBound(0); i >= 2; i--)
+          FilterStateP[i] = FilterStateP[i - 1];
+        FilterStateP[1] = r;
+        for (i = Zeros.GetUpperBound(0); i >= 1; i--)
+          FilterStateZ[i] = FilterStateZ[i - 1];
         // Next sample
         idx += step;
         outIdx += step;
       }
     }
 
-    public override void Reset()
+    protected override void DoReset()
     {
-      base.Reset();
+      base.DoReset();
+
       if (Setting.NewSettings)
         CalculateIIRCoeff();
-      if (FFilterStateZ != null)
-        Array.Clear(FFilterStateZ, 0, FFilterStateZ.Length);
-      if (FFilterStateP != null)
-        Array.Clear(FFilterStateP, 0, FFilterStateP.Length);
+
+      if (FilterStateZ != null)
+        Array.Clear(FilterStateZ, 0, FilterStateZ.Length);
+
+      if (FilterStateP != null)
+        Array.Clear(FilterStateP, 0, FilterStateP.Length);
     }
 
-    public override void Reset(bool useNextSample)
+    protected override void DoReset(bool useNextSample)
     {
-      base.Reset(useNextSample);
+      base.DoReset(useNextSample);
+
       if (!useNextSample)
-        Reset();
+        DoReset();
     }
 
-    public override void Reset(double xn)
+    protected override void DoReset(double value)
     {
-      int i;
       if (Setting.NewSettings)
         CalculateIIRCoeff();
+
       double r = 0;
-      for (i = 0; i <= FZeros.GetUpperBound(0); i++)
-        r = r + FZeros[i];
+      for (int i = 0; i <= Zeros.GetUpperBound(0); i++)
+        r = r + Zeros[i];
+
       double s = 1;
-      for (i = 1; i <= FPoles.GetUpperBound(0); i++)
-        s = s - FPoles[i];
-      double y = xn * r / s;
-      for (i = 0; i <= FFilterStateZ.GetUpperBound(0); i--)
-        FFilterStateZ[i] = xn;
-      for (i = 0; i <= FFilterStateZ.GetUpperBound(0); i--)
-        FFilterStateP[i] = y;
+      for (int i = 1; i <= Poles.GetUpperBound(0); i++)
+        s = s - Poles[i];
+
+      for (int i = 0; i <= FilterStateZ.GetUpperBound(0); i++)
+        FilterStateZ[i] = value;
+
+      double y = value * r / s;
+      for (int i = 0; i <= FilterStateZ.GetUpperBound(0); i++)
+        FilterStateP[i] = y;
     }
 
-    #endregion Public Methods
+    protected override void DoRestoreFilterState(FilterStateBase filterState)
+    {
+      FilterStateP = ((IIRFilterState)filterState).FilterStateP;
+      FilterStateZ = ((IIRFilterState)filterState).FilterStateZ;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IIRFilterBase"/> class.
+    /// </summary>
+    protected IIRFilterBase(int nrSettings)
+      : base(nrSettings)
+    {
+      Anticipate = true;
+      Setting[0].Info = "Abstract Custom IIRFilter";
+    }
+
+    #endregion protected methods
+
+    #region public properties
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the current sample is included in the output value
+    /// </summary>
+    /// <value>
+    ///   <c>true</c> if current input sample is included in the output value; otherwise, <c>false</c>.
+    /// </value>
+    public bool Anticipate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the backpolate value. Backpolating can be used to interpolate the filter output value between the previous and current calculated output value.
+    /// The filter output value is backpolate*PreviousOutput+(1-backpolate)*CurrentOutput.
+    /// </summary>
+    /// <value>
+    /// The backpolate value (range 0-1).
+    /// </value>
+    public double BackPolate { get; set; }
+
+    #endregion public properties
   }
 }

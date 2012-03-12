@@ -20,80 +20,85 @@ using System.Collections.Generic;
 
 namespace NeuroLoopGainLibrary.Filters
 {
-  public class FilterSetting
+  /// <summary>
+  /// Class to hold the filter settings
+  /// </summary>
+  public class FilterSettings
   {
-    #region Protected Fields
+    #region private fields
 
-    protected List<SettingInfo> Values;
+    private readonly List<SettingInfo> _values;
 
-    #endregion Protected Fields
+    #endregion private fields
 
     #region Constructors
 
-    public FilterSetting(int count)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FilterSettings"/> class.
+    /// </summary>
+    /// <param name="count">The number of settings.</param>
+    public FilterSettings(int count)
     {
-      Values = new List<SettingInfo>();
-      for (int i = 0; i < count + 1; i++)
-        Values.Add(new SettingInfo { DimensionInfo = "Hz", IsReadOnly = false });
-      Values[2].DimensionInfo = string.Empty;
+      _values = new List<SettingInfo>();
+      Count = count;
     }
 
     #endregion Constructors
 
-    #region Public Properties
+    #region public properties
 
+    /// <summary>
+    /// Gets the number of settings.
+    /// </summary>
     public int Count
     {
-      get { return Values.Count - 1; }
-    }
-
-    public bool NewSettings { get; set; }
-
-    public SettingInfo this[int index]
-    {
-      get { return Values[index]; }
-      set
+      get { return _values.Count - 1; }
+      private set
       {
-        if (!Values[index].IsReadOnly)
-        {
-          Values[index] = value;
-          NewSettings = true;
-        }
+        _values.Clear();
+        // Always add 1 extra to store filter name
+        for (int i = 0; i <= value; i++)
+          _values.Add(new SettingInfo { DimensionInfo = "Hz", IsReadOnly = false });
       }
     }
 
-    #endregion Public Properties
+    /// <summary>
+    /// Gets or sets a value indicating whether the settings have changed.
+    /// </summary>
+    /// <value>
+    ///   <c>true</c> if the settings changed; otherwise, <c>false</c>.
+    /// </value>
+    public bool NewSettings { get; set; }
 
-    #region Public Methods
+    /// <summary>
+    /// Gets or sets the <see cref="SettingInfo"/> at the specified index.
+    /// </summary>
+    public SettingInfo this[int index]
+    {
+      get { return _values[index]; }
+      set
+      {
+        if (_values[index].IsReadOnly)
+          return;
+        _values[index] = value;
+        NewSettings = true;
+      }
+    }
 
+    #endregion public properties
+
+    #region public methods
+
+    /// <summary>
+    /// Adds the specified number of (new) settings.
+    /// </summary>
+    /// <param name="count">The number of settings to add.</param>
     public void Add(int count = 1)
     {
       for (int i = 0; i < count; i++)
-        Values.Add(new SettingInfo());
+        _values.Add(new SettingInfo());
     }
 
-    public void SetCount(int nrSettings)
-    {
-      if (Count > nrSettings)
-      {
-        int nrToRemove = Count - nrSettings;
-        while (nrToRemove > 0)
-        {
-          Values.RemoveAt(Values.Count - 1);
-          nrToRemove--;
-        }
-      }
-      else if (Count < nrSettings)
-      {
-        int nrToAdd = nrSettings - Count;
-        while (nrToAdd > 0)
-        {
-          Values.Add(new SettingInfo { DimensionInfo = "Hz", IsReadOnly = false });
-          nrToAdd--;
-        }
-      }
-    }
-
-    #endregion Public Methods
+    #endregion public methods
   }
 }

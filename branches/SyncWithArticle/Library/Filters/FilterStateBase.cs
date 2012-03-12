@@ -18,6 +18,9 @@
 
 namespace NeuroLoopGainLibrary.Filters
 {
+  /// <summary>
+  /// Base class for saving/restoring a filter state.
+  /// </summary>
   public class FilterStateBase
   {
   }

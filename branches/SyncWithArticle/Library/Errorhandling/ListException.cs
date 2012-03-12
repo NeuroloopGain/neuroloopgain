@@ -1,4 +1,4 @@
-//
+﻿//
 // NeuroLoopGain Library
 // Library containing helper classes used to implement the NeuroLoopGain analysis.
 //
@@ -16,21 +16,12 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 
-namespace NeuroLoopGainLibrary.Filters
-{
-  /// <summary>
-  /// Defines the direction the filter processes data
-  /// </summary>
-  public enum FilterDirectionType
-  {
-    /// <summary>
-    /// Filter data from lower array index to higher array index
-    /// </summary>
-    Forward,
+using System;
 
-    /// <summary>
-    /// Filter data from higher array index to lower array index
-    /// </summary>
-    Backward
+namespace NeuroLoopGainLibrary.Errorhandling
+{
+  public class ListException : Exception
+  {
+    public ListException(string message) : base(message) { }
   }
 }

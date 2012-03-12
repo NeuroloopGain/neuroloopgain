@@ -20,22 +20,49 @@ using System.Data;
 
 namespace NeuroLoopGainLibrary.Filters
 {
+  /// <summary>
+  /// Class to hold the information about a filter setting.
+  /// </summary>
   public class SettingInfo
   {
-    #region Private Fields
+    #region private fields
 
     private double _value;
 
-    #endregion Private Fields
+    #endregion private fields
 
-    #region Public Properties
+    #region public properties
 
+    /// <summary>
+    /// Gets or sets the information about the dimension.
+    /// </summary>
+    /// <value>
+    /// The dimension info.
+    /// </value>
     public string DimensionInfo { get; set; }
 
+    /// <summary>
+    /// Gets or sets the information about the filter.
+    /// </summary>
+    /// <value>
+    /// The info.
+    /// </value>
     public string Info { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether this setting is read only.
+    /// </summary>
+    /// <value>
+    /// 	<c>true</c> if this setting is read only; otherwise, <c>false</c>.
+    /// </value>
     public bool IsReadOnly { get; set; }
 
+    /// <summary>
+    /// Gets or sets the value of this setting.
+    /// </summary>
+    /// <value>
+    /// The value.
+    /// </value>
     public double Value
     {
       get { return _value; }
@@ -47,6 +74,6 @@ namespace NeuroLoopGainLibrary.Filters
       }
     }
 
-    #endregion Public Properties
+    #endregion public properties
   }
 }
