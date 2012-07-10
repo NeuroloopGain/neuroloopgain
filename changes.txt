@@ -1,3 +1,6 @@
+10-Jul-2012, V2.0
+- Replaced PiB peak detection algorithm to be more compatible with the article.
+
 12-Mar-2012, v2.0
 - Fixed: Filter reset method would throw index of of range exception if called (Reported by Andrei Zavada).
   Fixed code by using (tested) department code.
