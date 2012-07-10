@@ -567,9 +567,9 @@ namespace NeuroLoopGain
       int inputSignal = -1;
       string outputFilename = null;
       bool showHelp = false;
-      string usage = string.Empty;
       double lp = double.NaN;
       double hp = double.NaN;
+      bool showHistogram = false;
 
       if (Environment.GetCommandLineArgs().Length > 0)
       {
@@ -635,6 +635,8 @@ namespace NeuroLoopGain
                                     CommandlineOptionFlags.HasParameter, (p, v) => TryParseToDouble(v, out hp));
         commandlineParser.AddOption("Batch", string.Empty, "Batchmode, no user interaction",
                                     (p, v) => { BatchMode = true; });
+        commandlineParser.AddOption("ShowHistogram", string.Empty, "Show histogram, after detecting PiB",
+                                    (p, v) => { showHistogram = true; });
         commandlineParser.AddOption("?", string.Empty, "Show usage help",
                                CommandlineOptionFlags.HideInUsage,
                                (p, v) => { showHelp = true; });
@@ -654,7 +656,10 @@ namespace NeuroLoopGain
       else
         ErrorLogger.WriteLog("Using configuration parameters from file " + configFilename);
 
-      _configuration = new MCconfiguration(configFilename);
+      _configuration = new MCconfiguration(configFilename)
+                         {
+                           ShowPiBHistogram = showHistogram
+                         };
 
       if (!string.IsNullOrEmpty(outputFilename))
         _configuration.OutputFileName = outputFilename;

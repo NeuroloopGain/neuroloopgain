@@ -210,13 +210,10 @@ namespace NeuroLoopGainLibrary.Edf
       if (Modified && !OpenReadOnly)
         CommitChanges();
 
-      if (_ownsStream)
-      {
+      if (_ownsStream && _fileHandle != null)
         _fileHandle.Close();
-        _fileHandle = null;
-      }
-      else
-        _fileHandle = null;
+
+      _fileHandle = null;
 
       _active = false;
     }

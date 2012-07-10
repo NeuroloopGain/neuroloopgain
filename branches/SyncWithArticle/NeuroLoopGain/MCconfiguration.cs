@@ -72,7 +72,6 @@ namespace NeuroLoopGain
       SafetyFactor = def_SafetyFactor;
       OutputFileName = def_OutputFileName;
       OverWriteOutputFile = def_OverWriteOutputFile;
-      CopyInputSignal = def_CopyInputSignal;
     }
 
     /// <summary>
@@ -288,7 +287,6 @@ namespace NeuroLoopGain
     private const double def_SafetyFactor = 3;
     private const string def_OutputFileName = "output.EDF";
     private const bool def_OverWriteOutputFile = true;
-    private const bool def_CopyInputSignal = false;
 
     #endregion constants
 
@@ -338,7 +336,6 @@ namespace NeuroLoopGain
     public bool OverWriteOutputFile { get; set; }
 
     public bool ShowPiBHistogram { get; set; }
-    public bool CopyInputSignal { get; set; }
 
     #endregion properties
 
@@ -457,8 +454,6 @@ namespace NeuroLoopGain
       if (TryParameterAsBool("ShowPiBHistogram", out boolValue))
         ShowPiBHistogram = boolValue;
 
-      if (TryParameterAsBool("CopyInputSignal", out boolValue))
-        CopyInputSignal = boolValue;
     }
 
     #endregion constructors

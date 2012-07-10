@@ -25,6 +25,5 @@
   <Parameter Name="DefaultOutputFile"></Parameter>
   <Parameter Name="OverWriteOutputFile">true</Parameter>
   <Parameter Name="ShowPiBHistogram">true</Parameter>
-  <Parameter Name="CopyInputSignal">false</Parameter>
 </MCconfiguration>
 

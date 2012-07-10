@@ -20,7 +20,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using NeuroLoopGainLibrary.Filters;
 using NeuroLoopGainLibrary.Errorhandling;
 using NeuroLoopGainLibrary.Edf;
@@ -707,21 +706,14 @@ namespace NeuroLoopGain
       bool result = true;
       try
       {
-        // Copy input signal to output file if requested.
-        if (AppConf.CopyInputSignal)
-          result = TranslateInputSignal();
-
         pbf.Progress.Value = 5;
         Application.DoEvents();
-
-        if (result)
-        {
-          pbf.Message = "Performing SU and SS reduction...";
-          Application.DoEvents();
-          result = DoSSSUReduction();
-          pbf.Progress.Value = 30;
-          Application.DoEvents();
-        }
+        
+        pbf.Message = "Performing SU and SS reduction...";
+        Application.DoEvents();
+        result = DoSSSUReduction();
+        pbf.Progress.Value = 30;
+        Application.DoEvents();
 
         if (result)
         {
@@ -944,24 +936,33 @@ namespace NeuroLoopGain
         }
       }
 
-      /*
-       * 2*SS_SUsmoother applied to the logarithmic converted values in the histogram 
-       * corresponds to the original values of piBPeakWidth
-       */
+      // 2*SS_SUsmoother applied to the logarithmic converted values in the histogram 
+      // corresponds to the original values of piBPeakWidth
       int sssuSmootherWidth = (int)Range.EnsureRange(Math.Truncate(Math.Log(1.0 + AppConf.piBPeakWidth) / AppConf.LogFloatA / 2), -int.MaxValue, int.MaxValue);
 
       // Apply the smoothing (mean filter) to the histogram
       for (int k = sssuSmootherWidth; k <= AppConf.SS_SUmax - AppConf.SS_SUmin - sssuSmootherWidth; k++)
       {
         for (int k1 = k - sssuSmootherWidth; k1 <= k + sssuSmootherWidth; k1++)
-        {
           sssuSmoothed[k] += sssu[k1];
-        }
+
         sssuSmoothed[k] = sssuSmoothed[k] / (2 * sssuSmootherWidth + 1);
       }
 
-      // todo: Marco: "gewoon" maximum zoeken, geen moeilijke functies.
+      // Simple peak detection to calculate LogPiBxx
+      int maxIdx = -1;
+      double maxValue = double.MinValue;
+      for (int i = 0; i < sssuSmoothed.Length - 1; i++)
+        if(sssuSmoothed[i] > maxValue)
+        {
+          maxIdx = i;
+          maxValue = sssuSmoothed[i];
+        }
 
+      if (maxIdx >= 0)
+        LogPiBxx = (short) (maxIdx + AppConf.SS_SUmin);
+
+/*
       // Construct the template to detect desired piB value peak in the smoothed histogram
       for (int k = 1; k < sssuTemplate.Length - 1; k++)
       {
@@ -1007,7 +1008,7 @@ namespace NeuroLoopGain
           LogPiBxx = (short)(k + AppConf.SS_SUmin);
         }
       }
-
+*/
 
       // Show histogram
       if (AppConf.ShowPiBHistogram)
@@ -1135,10 +1136,7 @@ namespace NeuroLoopGain
         // Processing input block by block
         int totalRecords = InputEDFFile.FileInfo.NrDataRecords;
         int currentOutputRecord = 0;
-        if (AppConf.CopyInputSignal)
-        {
-          OutputEDFFile.ReadDataBlock(currentOutputRecord);
-        }
+
         for (int k = 0; k < totalRecords; k++)
         {
           // Reading input block to the buffer
@@ -1215,10 +1213,6 @@ namespace NeuroLoopGain
                 OutputEDFFile.WriteDataBlock(currentOutputRecord);
                 outRecSample = 0;
                 currentOutputRecord++;
-                if ((currentOutputRecord < OutputEDFFile.FileInfo.NrDataRecords) && AppConf.CopyInputSignal)
-                {
-                  OutputEDFFile.ReadDataBlock(currentOutputRecord);
-                }
               }
 
               // Initialise the output smaple accumulators and reset output sample available flag
@@ -1386,42 +1380,6 @@ namespace NeuroLoopGain
       {
         AppError.Add(e.Message, NeuroLoopGainController.DefaultErrorMessageId);
       }
-
-      return !AppError.Signaled;
-    }
-
-    /// <summary>
-    /// Copies the input analysis signal to the output file.
-    /// </summary>
-    /// <returns><c>true</c> if successful</returns>
-    private bool TranslateInputSignal()
-    {
-      int inputBlockSamples = InputEDFFile.SignalInfo[InputSignalSelected].NrSamples;
-
-      int outBlockSample = 0;
-
-      // Processing input block by block
-      for (int k = 0; k < InputEDFFile.FileInfo.NrDataRecords; k++)
-      {
-        // Reading input block to the buffer
-        InputEDFFile.ReadDataBlock(k);
-
-        for (int k1 = 0; k1 < inputBlockSamples; k1++)
-        {
-          OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.Input] + outBlockSample] = InputEDFFile.DataBuffer[InputBufferOffsets[InputSignalSelected] + k1];
-
-          // Check if output block filled
-          if (outBlockSample == (OutputEDFFile.SignalInfo[0].NrSamples - 1))
-          {
-            OutputEDFFile.WriteDataBlock(OutputEDFFile.FileInfo.NrDataRecords);
-            outBlockSample = 0;
-          }
-          else
-            outBlockSample++;
-        }
-      }
-
-      OutputEDFFile.CommitChanges();
 
       return !AppError.Signaled;
     }

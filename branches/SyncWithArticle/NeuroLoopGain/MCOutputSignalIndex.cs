@@ -20,58 +20,33 @@
 
 namespace NeuroLoopGain
 {
-
-  // todo: Marco, remove copy input signal support
-
   public static class MCOutputSignalIndex
   {
-    #region private fields
-
-    private static bool _copyInputSignal;
-
-    #endregion private fields
-
     #region Private Methods
 
     static MCOutputSignalIndex()
     {
-      CopyInputSignal = false;
+      SU = 0;
+      SS = 1;
+      SUplus = 2;
+      SUminus = 3;
+      SSplus = 4;
+      SSminus = 5;
+      SSP = 6;
+      SS0 = 7;
+      HFart = 8;
+      LFart = 9;
+      MissingSignal = 10;
+      MC = 11;
+      MCjump = 12;
+      MCevent = 13;
     }
 
     #endregion Private Methods
 
-    #region public properties
-
-    public static bool CopyInputSignal
-    {
-      get
-      {
-        return _copyInputSignal;
-      }
-      set
-      {
-        _copyInputSignal = value;
-        Input = value ? 0 : -1;
-        SU = value ? 1 : 0;
-        SS = value ? 2 : 1;
-        SUplus = value ? 3 : 2;
-        SUminus = value ? 4 : 3;
-        SSplus = value ? 5 : 4;
-        SSminus = value ? 6 : 5;
-        SSP = value ? 7 : 6;
-        SS0 = value ? 8 : 7;
-        HFart = value ? 9 : 8;
-        LFart = value ? 10 : 9;
-        MissingSignal = value ? 11 : 10;
-        MC = value ? 12 : 11;
-        MCjump = value ? 13 : 12;
-        MCevent = value ? 14 : 13;
-      }
-    }
+    #region Public Properties
 
     public static int HFart { get; private set; }
-
-    public static int Input { get; private set; }
 
     public static int LFart { get; private set; }
 
@@ -99,6 +74,6 @@ namespace NeuroLoopGain
 
     public static int SUplus { get; private set; }
 
-    #endregion public properties
+    #endregion Public Properties
   }
 }
