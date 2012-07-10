@@ -66,10 +66,7 @@ namespace NeuroLoopGain
     /// <returns></returns>
     private bool PrepareEDFFiles()
     {
-      _neuroLoopGain.NumOutputSignals = AppConf.CopyInputSignal ? 15 : 14;
-
-      // Set output signal indexes, so we can use symbolic names: e.g. MCOutputSignalIndex.MCevent
-      MCOutputSignalIndex.CopyInputSignal = AppConf.CopyInputSignal;
+      _neuroLoopGain.NumOutputSignals = 14;
 
       double[] sFrecs = new double[_neuroLoopGain.NumOutputSignals];
 
@@ -102,8 +99,6 @@ namespace NeuroLoopGain
         {
           sFrecs[k] = doubleValue;
         }
-        if (AppConf.CopyInputSignal)
-          sFrecs[0] = _neuroLoopGain.InputSampleFrequency;
 
         //TODO: check this
         List<EdfDataBlockSizeCalculatorResult> results = new List<EdfDataBlockSizeCalculatorResult>();
@@ -162,61 +157,37 @@ namespace NeuroLoopGain
              */
             nsamples = Math.Truncate(nsamples);
           }
-          outputEDF.SignalInfo[k].NrSamples = (int)nsamples;
 
-          if (AppConf.CopyInputSignal && k == MCOutputSignalIndex.Input)
+          outputEDF.SignalInfo[k].NrSamples = (int)nsamples;
+          outputEDF.SignalInfo[k].DigiMax = short.MaxValue;
+          outputEDF.SignalInfo[k].DigiMin = -short.MaxValue;
+
+          if (k <= MCOutputSignalIndex.SS0)
           {
-            outputEDF.SignalInfo[k].DigiMax = edfSignalInfo.DigiMax;
-            outputEDF.SignalInfo[k].DigiMin = edfSignalInfo.DigiMin;
-            outputEDF.SignalInfo[k].PhysiMax = edfSignalInfo.PhysiMax;
-            outputEDF.SignalInfo[k].PhysiMin = edfSignalInfo.PhysiMin;
-            outputEDF.SignalInfo[k].PhysiDim = edfSignalInfo.PhysiDim;
+            outputEDF.SignalInfo[k].PhysiDim = "Filtered";
+            outputEDF.SignalInfo[k].PhysiMax = short.MaxValue;
+            outputEDF.SignalInfo[k].PhysiMin = -short.MaxValue;
           }
           else
-          {
-            outputEDF.SignalInfo[k].DigiMax = short.MaxValue;
-            outputEDF.SignalInfo[k].DigiMin = -short.MaxValue;
-            //if (k < 9)
-            if (k <= MCOutputSignalIndex.SS0)
+            if ((k >= MCOutputSignalIndex.HFart) && (k <= MCOutputSignalIndex.MissingSignal))
             {
-              outputEDF.SignalInfo[k].PhysiDim = "Filtered";
-              outputEDF.SignalInfo[k].PhysiMax = short.MaxValue;
-              outputEDF.SignalInfo[k].PhysiMin = -short.MaxValue;
+              outputEDF.SignalInfo[k].PhysiMax = short.MaxValue * NeuroLoopGain.ArtifactPhysicalDimensionResolution;
+              outputEDF.SignalInfo[k].PhysiMin = -short.MaxValue * NeuroLoopGain.ArtifactPhysicalDimensionResolution;
             }
             else
-              if ((k >= MCOutputSignalIndex.HFart) && (k <= MCOutputSignalIndex.MissingSignal))
-              {
-                outputEDF.SignalInfo[k].PhysiMax = short.MaxValue * NeuroLoopGain.ArtifactPhysicalDimensionResolution;
-                outputEDF.SignalInfo[k].PhysiMin = -short.MaxValue * NeuroLoopGain.ArtifactPhysicalDimensionResolution;
-                //outputEDF.SignalInfo[k].PhysiMax = short.MaxValue;
-                //outputEDF.SignalInfo[k].PhysiMin = -short.MaxValue;
-              }
-              else
-              {
-                outputEDF.SignalInfo[k].PhysiDim = "%";
-                outputEDF.SignalInfo[k].PhysiMax = short.MaxValue / AppConf.MicGain;
-                outputEDF.SignalInfo[k].PhysiMin = -short.MaxValue / AppConf.MicGain;
-              }
-            //if (k > 0)
-            //{
-            //  // todo: Marco: Kan toch makkelijker?
-            //  if (AppConf.CopyInputSignal)
-            //    _neuroLoopGain.OutputBufferOffsets[k] = _neuroLoopGain.OutputBufferOffsets[k - 1] + outputEDF.SignalInfo[k - 1].NrSamples;
-            //  else
-            //    _neuroLoopGain.OutputBufferOffsets[k + 1] = _neuroLoopGain.OutputBufferOffsets[k] + outputEDF.SignalInfo[k].NrSamples;
-            //}
-          }
+            {
+              outputEDF.SignalInfo[k].PhysiDim = "%";
+              outputEDF.SignalInfo[k].PhysiMax = short.MaxValue / AppConf.MicGain;
+              outputEDF.SignalInfo[k].PhysiMin = -short.MaxValue / AppConf.MicGain;
+            }
 
           outputEDF.SignalInfo[k].Reserved = edfSignalInfo.Reserved;
 
           if ((k >= MCOutputSignalIndex.SU) && (k <= MCOutputSignalIndex.SS0))
-            outputEDF.SignalInfo[k].SignalLabel = AppConf.CopyInputSignal
-                                                    ? _signalOutputLabels[k] + " " + edfSignalInfo.PhysiDim + "**2/x"
-                                                    : _signalOutputLabels[k + 1] + " " + edfSignalInfo.PhysiDim + "**2/x";
+            outputEDF.SignalInfo[k].SignalLabel = _signalOutputLabels[k + 1] + " " + edfSignalInfo.PhysiDim + "**2/x";
           else
-            outputEDF.SignalInfo[k].SignalLabel = AppConf.CopyInputSignal
-                                                    ? _signalOutputLabels[k]
-                                                    : _signalOutputLabels[k + 1];
+            outputEDF.SignalInfo[k].SignalLabel = _signalOutputLabels[k + 1];
+
           outputEDF.SignalInfo[k].TransducerType = edfSignalInfo.TransducerType;
           outputEDF.SignalInfo[k].ThousandSeparator = edfSignalInfo.ThousandSeparator;
         }
