@@ -252,79 +252,23 @@ namespace NeuroLoopGainLibrary.Edf
         else
         {
           Debug.Assert(AllBlocksAvailable, TALConsts.NotAllTALBlocksAreAvailable);
+
+          // Calculate new block-onset 
           double dT = value.SecDifference(_fileStartDateTime);
+          dT -= Math.Truncate(dT);
           double block0Onset = Block(0).DataRecOnset;
-          // If move filestart towards end, check if all annotations will be within a datablock
-          if ((dT > 0) && (Count > 0) && (this[0].Onset < dT))
-            throw new EdfPlusTALException(TALConsts.UnableToPerformRequestedOperation);
-          // Check if there have to be any blocks removed
-          if (BlockDuration > 0)
-          {
-            int index = -1;
-            while ((index + 1 < BlockCount) && (Block(index + 1).DataRecOnset < dT))
-              index++;
-            if (index >= 0) //TODO: Check why don't lock the list here?
-              BlocksList.RemoveRange(0, index + 1);
-          }
+          if (dT + block0Onset >= 1)
+            dT -= 1;
           else
-          {
-            int index = 0;
-            while ((index + 1 < BlockCount) && (Block(index + 1).DataRecOnset < dT))
-              index++;
-            if (index > 0)
-              BlocksList.RemoveRange(1, index);
-          }
-          // Check the number of Blocks to be added
-          int insertCount = 0;
-          if (BlockDuration > 0)
-          {
-            if (BlocksContinuous)
-            {
-              if (BlockCount > 0)
-                while ((dT + insertCount * BlockDuration) < (Block(0).DataRecOnset))
-                  insertCount++;
-              else
-                insertCount = 1;
-            }
-            else
-            {
-              if ((BlockCount == 0) || !MathEx.SameValue(Block(0).DataRecOnset, Math.Abs(dT)))
-                insertCount = 1;
-            }
-          }
-          // Update Block Onset values
-          if (BlockDuration > 0)
-            for (int i = 0; i < BlockCount; i++)
-              Block(i).DataRecOnset = Block(i).DataRecOnset - dT;
-          else
-            for (int i = 1; i < BlockCount; i++)
-              Block(i).DataRecOnset = Block(i).DataRecOnset - dT;
-          // Update Annotation Onset values
+            if (dT + block0Onset < 1)
+              dT += 1;
+          // update block onsets
+          for (int i = 0; i < BlockCount; i++)
+            Block(i).DataRecOnset -= dT;
+          // update annotation onsets; annotations will still be at the same location relative to the signals.
           for (int i = 0; i < Count; i++)
-            this[i].Onset -= dT;
-          // Insert new blocks
-          for (int i = 0; i < insertCount; i++)
-            BlocksList.Insert(0, null);
-          for (int i = 0; i < insertCount; i++)
-          {
-            if (i == 0)
-              AddBlock(i, block0Onset);
-            else
-              AddBlock(i, i * BlockDuration);
-          }
-          // Remove overlapping Block onsets
-          if (BlockDuration > 0)
-          {
-            double tOnset = Block(0).DataRecOnset + BlockDuration;
-            for (int i = 1; i < BlockCount; i++)
-            {
-              if (Block(i).DataRecOnset < tOnset)
-                Block(i).DataRecOnset = tOnset;
-              tOnset += BlockDuration;
-            }
-          }
-          // Relink Annotations to updated Block Onset values
-          RedistributeAnnotations();
+            AnnotationsList[i].Onset += dT;
+
           _fileStartDateTime = value;
         }
       }

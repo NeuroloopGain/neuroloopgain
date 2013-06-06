@@ -119,8 +119,12 @@ namespace NeuroLoopGainLibrary.DateTimeTypes
 
     public double SecDifference(HPDateTime hpDateTime)
     {
-      // TODO (SecDifference): Round properly, instead of casting
       return (double)((_ticks - hpDateTime.Ticks) / FemtoSecondsPerSecond);
+    }
+
+    public double SecDifference(DateTime dateTime)
+    {
+      return SecDifference(new HPDateTime(dateTime));
     }
 
     public override int GetHashCode()
