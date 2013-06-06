@@ -24,16 +24,21 @@ namespace NeuroLoopGainLibrary.Edf
 {
   public class EdfPlusAnnotation
   {
-
-
     #region Constructors
-    public EdfPlusAnnotation(EdfPlusAnnotationListBase owner) : this(owner, 0, 0, string.Empty, -1) { }
 
-    public EdfPlusAnnotation(EdfPlusAnnotationListBase owner, int dataRecNr, double onset, double duration, string annotation) :
-      this(owner, dataRecNr, onset, duration, annotation, 0) { }
+    public EdfPlusAnnotation(EdfPlusAnnotationListBase owner) : this(owner, 0, 0, string.Empty, -1)
+    {
+    }
+
+    public EdfPlusAnnotation(EdfPlusAnnotationListBase owner, int dataRecNr, double onset, double duration,
+                             string annotation) :
+                               this(owner, dataRecNr, onset, duration, annotation, 0)
+    {
+    }
 
     public EdfPlusAnnotation(
-      EdfPlusAnnotationListBase owner, int dataRecNr, double onset, double duration, string annotation, int annotationSignalNr)
+      EdfPlusAnnotationListBase owner, int dataRecNr, double onset, double duration, string annotation,
+      int annotationSignalNr)
     {
       FileOrder = -1;
       _owner = owner;
@@ -46,18 +51,23 @@ namespace NeuroLoopGainLibrary.Edf
     }
 
     public EdfPlusAnnotation(EdfPlusAnnotationListBase owner, int dataRecNr, double onset, string annotation) :
-      this(owner, dataRecNr, onset, annotation, 0) { }
+      this(owner, dataRecNr, onset, annotation, 0)
+    {
+    }
 
     public EdfPlusAnnotation(
       EdfPlusAnnotationListBase owner, int dataRecNr, double onset, string annotation, int annotationSignalNr) :
-      this(owner, dataRecNr, onset, 0, annotation, annotationSignalNr) { }
+        this(owner, dataRecNr, onset, 0, annotation, annotationSignalNr)
+    {
+    }
+
     #endregion
 
     #region Private members
+
     private string _annotation;
     private int _annotationSignalNr;
     private double _duration;
-    private int _fileOrder = -1;
     private double _onset;
     private EdfPlusAnnotationListBase _owner;
 
@@ -70,16 +80,17 @@ namespace NeuroLoopGainLibrary.Edf
     {
       return new HPDateTime(Owner.FileStartDateTime, Onset);
     }
+
     #endregion
 
     #region Properties
+
     public string Annotation
     {
       get { return _annotation; }
       set
       {
-        if (_annotation == value)
-          return;
+        if (_annotation == value) return;
         _annotation = value;
         Modified = true;
       }
@@ -91,11 +102,9 @@ namespace NeuroLoopGainLibrary.Edf
       set
       {
         Debug.Assert(value >= 0, TALConsts.AnnotationSignalNrError);
-        if (_annotationSignalNr != value)
-        {
-          _annotationSignalNr = value;
-          Modified = true;
-        }
+        if (_annotationSignalNr == value) return;
+        _annotationSignalNr = value;
+        Modified = true;
       }
     }
 
@@ -116,19 +125,14 @@ namespace NeuroLoopGainLibrary.Edf
     {
       get
       {
-        return new HPDateTime(Owner.FileStartDateTime, Onset + Duration);
+        HPDateTime result = new HPDateTime(Owner.FileStartDateTime.DateTime);
+        result += Onset + Duration;
+        return result;
       }
-      set
-      {
-        Duration = value.SecDifference(StartDateTime);
-      }
+      set { Duration = value.SecDifference(StartDateTime); }
     }
 
-    public int FileOrder
-    {
-      get { return _fileOrder; }
-      set { _fileOrder = value; }
-    }
+    public int FileOrder { get; set; }
 
     public bool Modified { get; set; }
 
@@ -148,30 +152,32 @@ namespace NeuroLoopGainLibrary.Edf
       get { return _owner; }
       set
       {
-        if (_owner != value)
-        {
-          _owner = value;
-          Modified = true;
-        }
+        if (_owner == value) return;
+        _owner = value;
+        Modified = true;
       }
     }
 
-    public int OwnerListIndex { get { return GetOwnerListIndex(); } }
+    public int OwnerListIndex
+    {
+      get { return GetOwnerListIndex(); }
+    }
 
     public HPDateTime StartDateTime
     {
       get
       {
-        return new HPDateTime(Owner.FileStartDateTime, Onset);
+        HPDateTime result = new HPDateTime(Owner.FileStartDateTime.DateTime);
+        result += Onset;
+        return result;
       }
-      set
-      {
-        Onset = value.SecDifference(StartDateTime);
-      }
+      set { Onset = value.SecDifference(Owner.FileStartDateTime.DateTime); }
     }
+
     #endregion
 
     #region Public members
+
     public override string ToString()
     {
       if (Duration > 0)
@@ -183,10 +189,13 @@ namespace NeuroLoopGainLibrary.Edf
                              Duration.ToString("G", TALConsts.ciEnglishUS),
                              TALConsts.c20, Annotation, TALConsts.c20);
       }
-      return string.Format("{0}{1}{2}{3}{4}",
-                           Onset >= 0 ? "+" : string.Empty,
-                           Onset.ToString("G", TALConsts.ciEnglishUS),
-                           TALConsts.c20, Annotation, TALConsts.c20);
+      else
+      {
+        return string.Format("{0}{1}{2}{3}{4}",
+                             Onset >= 0 ? "+" : string.Empty,
+                             Onset.ToString("G", TALConsts.ciEnglishUS),
+                             TALConsts.c20, Annotation, TALConsts.c20);
+      }
     }
 
     #endregion
@@ -210,15 +219,11 @@ namespace NeuroLoopGainLibrary.Edf
         {
           if (tag1 < tag2)
             return -1;
-          if (tag1 > tag2)
-            return 1;
-          return 0;
+          return tag1 > tag2 ? 1 : 0;
         }
         return -1;
       }
-      if (tag2 >= 0)
-        return 1;
-      return 0;
+      return tag2 >= 0 ? 1 : 0;
     }
 
     #endregion

@@ -906,8 +906,6 @@ namespace NeuroLoopGain
       double[] sssuSmoothed = new double[AppConf.SS_SUmax - AppConf.SS_SUmin + 1];
       double[] sssuTemplate = new double[AppConf.piBCorrelationFunctionBufferSize];
       double[] sssuMatch = new double[AppConf.SS_SUmax - AppConf.SS_SUmin + 1];
-      double x;
-      double value;
 
       sssuSmoothed.Fill(0);
       sssuTemplate.Fill(0);
@@ -926,13 +924,13 @@ namespace NeuroLoopGain
           double ss = MathEx.ExpInteger(OutputEDFFile.DataBuffer[OutputBufferOffset[MCOutputSignalIndex.SS] + k1], AppConf.LogFloatY0, AppConf.LogFloatA);
 
           // Do not add zeros from unrecorded end of file
-          if ((Math.Abs(su) >= AppConf.LogFloatY0) || (Math.Abs(ss) >= AppConf.LogFloatY0))
-          {
-            short j = MathEx.LogFloat(ss - su, AppConf.LogFloatY0, AppConf.LogFloatA);
-            //Watch it! SS_SUmin and SS_SUmax now refer to log-transformed values
-            if (Range.InRange(j, AppConf.SS_SUmin, AppConf.SS_SUmax) && (sssu[j - AppConf.SS_SUmin] < int.MaxValue) && (j != 0))
-              sssu[j - AppConf.SS_SUmin]++;
-          }
+          if ((Math.Abs(su) < AppConf.LogFloatY0) && (Math.Abs(ss) < AppConf.LogFloatY0)) 
+            continue;
+
+          short j = MathEx.LogFloat(ss - su, AppConf.LogFloatY0, AppConf.LogFloatA);
+          //Watch it! SS_SUmin and SS_SUmax now refer to log-transformed values
+          if (Range.InRange(j, AppConf.SS_SUmin, AppConf.SS_SUmax) && (sssu[j - AppConf.SS_SUmin] < int.MaxValue) && (j != 0))
+            sssu[j - AppConf.SS_SUmin]++;
         }
       }
 
